@@ -1,0 +1,78 @@
+{
+  "file": "file-sample_2.docx",
+  "metadata": {
+    "title": "",
+    "author": "",
+    "created": "2017-08-02 11:09:18+00:00",
+    "modified": "",
+    "paragraphs_total": 49,
+    "tables_total": 1,
+    "images_total": 1
+  },
+  "used_styles": [
+    "Heading 1",
+    "Heading 2",
+    "Normal",
+    "Text Body",
+    "Title"
+  ],
+  "headings_count": 7,
+  "headings_preview": [
+    {
+      "index": 2,
+      "style": "Heading 1",
+      "outline_level": null,
+      "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc ac faucibus odio."
+    },
+    {
+      "index": 24,
+      "style": "Heading 1",
+      "outline_level": null,
+      "text": "Cras fringilla ipsum magna, in fringilla dui commodo a."
+    },
+    {
+      "index": 30,
+      "style": "Heading 1",
+      "outline_level": null,
+      "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "index": 33,
+      "style": "Heading 2",
+      "outline_level": null,
+      "text": "Maecenas mauris lectus, lobortis et purus mattis, blandit dictum tellus."
+    },
+    {
+      "index": 36,
+      "style": "Heading 2",
+      "outline_level": null,
+      "text": "In eleifend velit vitae libero sollicitudin euismod."
+    },
+    {
+      "index": 42,
+      "style": "Heading 2",
+      "outline_level": null,
+      "text": "Maecenas mauris lectus, lobortis et purus mattis, blandit dictum tellus."
+    },
+    {
+      "index": 45,
+      "style": "Heading 2",
+      "outline_level": null,
+      "text": "In eleifend velit vitae libero sollicitudin euismod."
+    }
+  ],
+  "tables": [
+    {
+      "table_index": 0,
+      "rows": 6,
+      "columns": 4,
+      "headers": [
+        "",
+        "Lorem ipsum",
+        "Lorem ipsum",
+        "Lorem ipsum"
+      ]
+    }
+  ],
+  "sections_with_headers": 0
+}

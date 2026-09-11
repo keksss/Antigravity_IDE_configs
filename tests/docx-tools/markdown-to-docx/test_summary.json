@@ -1,0 +1,75 @@
+{
+  "skill": "markdown-to-docx",
+  "total_scenarios": 11,
+  "passed_scenarios": 11,
+  "failed_scenarios": 0,
+  "all_passed": true,
+  "scenarios": [
+    {
+      "scenario": "Scenario 01: Headings & Hierarchy",
+      "passed": true,
+      "details": "Preserved H1-H6 headings and Cyrillic titles",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\01_headings_and_hierarchy"
+    },
+    {
+      "scenario": "Scenario 02: Full Inline Formatting",
+      "passed": true,
+      "details": "Preserved bold, italic, strike, code, and breaks",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\02_inline_formatting"
+    },
+    {
+      "scenario": "Scenario 03: Hyperlinks & Anchors",
+      "passed": true,
+      "details": "Preserved clickable OpenXML hyperlinks with rich text",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\03_hyperlinks_and_anchors"
+    },
+    {
+      "scenario": "Scenario 04: Lists & Hierarchies",
+      "passed": true,
+      "details": "Preserved 3-level lists and task list checkboxes",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\04_lists_and_hierarchies"
+    },
+    {
+      "scenario": "Scenario 05: GFM Tables & Alignment",
+      "passed": true,
+      "details": "Preserved alignments, tblHeader, cantSplit, and cells",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\05_gfm_tables_and_alignment"
+    },
+    {
+      "scenario": "Scenario 06: Blockquotes & Callouts",
+      "passed": true,
+      "details": "Preserved all 5 alert callouts with rich formatting",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\06_blockquotes_and_callouts"
+    },
+    {
+      "scenario": "Scenario 07: Code Blocks & Syntax",
+      "passed": true,
+      "details": "Preserved code indentation, Consolas font, and shading",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\07_code_blocks_and_syntax"
+    },
+    {
+      "scenario": "Scenario 08: Images & Aspect Ratio",
+      "passed": true,
+      "details": "Embedded media with Pillow aspect ratio & graceful fallback",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\08_images_and_aspect_ratio"
+    },
+    {
+      "scenario": "Scenario 09: Template Inheritance",
+      "passed": true,
+      "details": "Inherited styles and sections while clearing body",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\09_template_inheritance"
+    },
+    {
+      "scenario": "Scenario 10: Chained Workflow with docx-editor",
+      "passed": true,
+      "details": "End-to-end MD -> DOCX -> docx-editor pipeline verified",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\10_chained_workflow"
+    },
+    {
+      "scenario": "Scenario 11: Word COM Automation",
+      "passed": true,
+      "details": "All 10 docx files opened in MS Word & exported to PDF",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\11_word_com_automation"
+    }
+  ]
+}

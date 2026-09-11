@@ -1,0 +1,98 @@
+[
+  {
+    "scenario": "Scenario 01: Inspect All Modes",
+    "passed": true,
+    "details": "Tested 6 modes and JSON output across 3 samples",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\01_inspect_all_modes"
+  },
+  {
+    "scenario": "Scenario 02: Replace Text Body",
+    "passed": true,
+    "details": "Replaced email, verified .bak and 2 images intact",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\02_replace_text_body"
+  },
+  {
+    "scenario": "Scenario 03: Replace Text Table Cells",
+    "passed": true,
+    "details": "Replaced text inside table cell with Cyrillic string",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\03_replace_text_table_cells"
+  },
+  {
+    "scenario": "Scenario 04: Replace Text Multi-Run",
+    "passed": true,
+    "details": "Replaced multi-run string spanning bold & italic runs",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\04_replace_text_multirun"
+  },
+  {
+    "scenario": "Scenario 05: Replace Repeated Occurrences",
+    "passed": true,
+    "details": "Replaced 6 occurrences, preserved 49 paragraphs & 1 table",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\05_replace_text_repeated"
+  },
+  {
+    "scenario": "Scenario 06: Append Paragraph Inherit",
+    "passed": true,
+    "details": "Appended paragraph, total paragraphs increased to 50",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\06_append_paragraph_inherit"
+  },
+  {
+    "scenario": "Scenario 07: Append Paragraph Custom Style",
+    "passed": true,
+    "details": "Appended with custom style 'mybody', all 9 images preserved",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\07_append_paragraph_custom"
+  },
+  {
+    "scenario": "Scenario 08: Insert After Heading",
+    "passed": true,
+    "details": "Inserted paragraph strictly at anchor + 1 (pos 15)",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\08_insert_after_heading"
+  },
+  {
+    "scenario": "Scenario 09: Insert After Custom Style",
+    "passed": true,
+    "details": "Inserted after anchor 'Recruitment', all 9 images preserved",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\09_insert_after_custom_style"
+  },
+  {
+    "scenario": "Scenario 10: Add Table Row Standard",
+    "passed": true,
+    "details": "Added row with formatting inheritance, rows increased to 7",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\10_add_table_row_standard"
+  },
+  {
+    "scenario": "Scenario 11: Add Table Row Complex Table",
+    "passed": true,
+    "details": "Added row to complex layout table, rows increased to 6",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\11_add_table_row_complex"
+  },
+  {
+    "scenario": "Scenario 12: Backup and Safety Mechanisms",
+    "passed": true,
+    "details": "Normal run creates .bak (True), --no-backup suppresses (True)",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\12_backup_and_safety"
+  },
+  {
+    "scenario": "Scenario 13: Error Handling Robustness",
+    "passed": true,
+    "details": "All 3 failure cases returned code 1 with clean error messages",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\13_error_handling_robustness"
+  },
+  {
+    "scenario": "Scenario 14: Jinja2 Template Rendering",
+    "passed": true,
+    "details": "Inspected variables, rendered table loops & conditions",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\14_template_render_jinja2"
+  },
+  {
+    "scenario": "Scenario 16: Full Document Restyle and Rebuild",
+    "passed": true,
+    "details": "Restyled sample 3, removed cover, headers/footers with logos, lists, tables with in-cell images & notes",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\16_full_document_restyle_and_rebuild"
+  },
+  {
+    "scenario": "Scenario 15: Microsoft Word COM Validation",
+    "passed": true,
+    "details": "Validated 12 documents in native Word COM",
+    "folder": "tests\\docx-tools\\docx-editor\\scenarios\\15_word_com_validation"
+  }
+]

@@ -1,0 +1,3 @@
+=== DOCX Inspection: file-sample_2.docx ===
+
+Headers & Footers (0):

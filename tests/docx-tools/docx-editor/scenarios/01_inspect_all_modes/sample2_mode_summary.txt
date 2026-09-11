@@ -1,0 +1,22 @@
+=== DOCX Inspection: file-sample_2.docx ===
+Author: N/A | Modified: N/A
+Total Paragraphs: 49 | Total Tables: 1 | Images: 1
+
+Styles in Use:
+  - Heading 1
+  - Heading 2
+  - Normal
+  - Text Body
+  - Title
+
+Document Headings (7):
+  [Heading 1] (p#2) Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc ac faucibus odio.
+  [Heading 1] (p#24) Cras fringilla ipsum magna, in fringilla dui commodo a.
+  [Heading 1] (p#30) Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+  [Heading 2] (p#33) Maecenas mauris lectus, lobortis et purus mattis, blandit dictum tellus.
+  [Heading 2] (p#36) In eleifend velit vitae libero sollicitudin euismod.
+  [Heading 2] (p#42) Maecenas mauris lectus, lobortis et purus mattis, blandit dictum tellus.
+  [Heading 2] (p#45) In eleifend velit vitae libero sollicitudin euismod.
+
+Tables (1):
+  Table #0: 6 rows x 4 cols [ | Lorem ipsum | Lorem ipsum | Lorem ipsum]

@@ -1,0 +1,20 @@
+=== DOCX Inspection: file-sample_3.docx ===
+Author: N/A | Modified: 2026-09-11 08:41:00+00:00
+Total Paragraphs: 46 | Total Tables: 0 | Images: 8
+
+Styles in Use:
+  - List Paragraph
+  - Normal
+  - main-heading
+  - mybody
+
+Document Headings (8):
+  [main-heading] (p#1) Achievements
+  [main-heading] (p#4) Headcount
+  [main-heading] (p#6) Recruitment
+  [main-heading] (p#9) Employee Growth
+and Salary Distribution ANALYSIS
+  [main-heading] (p#13) Training
+  [main-heading] (p#16) PERIODIC EMPLOYEE EVALUATION
+  [main-heading] (p#31) Recognition
+  [main-heading] (p#34) HR Events

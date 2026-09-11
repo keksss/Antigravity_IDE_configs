@@ -1,0 +1,1 @@
+# Сценарий 01: Тестирование docx_inspect.py\n\n- Протестированы все режимы: summary, outline, tables, styles, headers, raw\n- Проверена генерация JSON\n- Результат: УСПЕХ\n

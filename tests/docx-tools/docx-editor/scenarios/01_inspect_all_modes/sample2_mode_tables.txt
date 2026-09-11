@@ -1,0 +1,4 @@
+=== DOCX Inspection: file-sample_2.docx ===
+
+Tables (1):
+  Table #0: 6 rows x 4 cols [ | Lorem ipsum | Lorem ipsum | Lorem ipsum]

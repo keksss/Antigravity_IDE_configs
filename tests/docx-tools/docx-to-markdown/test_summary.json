@@ -1,0 +1,63 @@
+{
+  "skill": "docx-to-markdown",
+  "total_scenarios": 9,
+  "passed_scenarios": 9,
+  "failed_scenarios": 0,
+  "all_passed": true,
+  "scenarios": [
+    {
+      "scenario": "Scenario 01: Headings & Structure",
+      "passed": true,
+      "details": "Preserved H1-H3 and localized headings",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\01_headings_and_structure"
+    },
+    {
+      "scenario": "Scenario 02: Tables to GFM",
+      "passed": true,
+      "details": "Clean GFM markdown tables with headers & delimiters",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\02_tables_formatting"
+    },
+    {
+      "scenario": "Scenario 03: Images & Relative Paths",
+      "passed": true,
+      "details": "Extracted 2 images, verified relative markdown links",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\03_image_extraction_and_paths"
+    },
+    {
+      "scenario": "Scenario 04: Comments Extraction",
+      "passed": true,
+      "details": "Extracted author, timestamp, target snippet & comment text",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\04_comments_extraction"
+    },
+    {
+      "scenario": "Scenario 05: Lists, Styles & Links",
+      "passed": true,
+      "details": "Preserved bold, italic, bullet lists, and markdown links",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\05_lists_styles_links"
+    },
+    {
+      "scenario": "Scenario 06: Headers & Footers",
+      "passed": true,
+      "details": "Extracted header/footer block with --include-headers",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\06_headers_footers"
+    },
+    {
+      "scenario": "Scenario 07: Conversion Engines",
+      "passed": true,
+      "details": "Successfully tested markitdown, mammoth, and auto engines",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\07_conversion_engines"
+    },
+    {
+      "scenario": "Scenario 08: Real Samples Suite",
+      "passed": true,
+      "details": "All 3 sample docx files converted with media, tables & comments",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\08_real_world_samples"
+    },
+    {
+      "scenario": "Scenario 09: CLI & Edge Cases",
+      "passed": true,
+      "details": "Verified error handling, nested path creation, minimal docx",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\09_cli_and_edge_cases"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "docx-tools",
+  "version": "1.2.0",
+  "description": "Comprehensive tools for reading, editing, templating (docxtpl/Jinja2), generating (MarkItDown/mammoth), and exporting Microsoft Word (.docx) documents with strict style preservation, Markdown conversion, and PDF export.",
+  "author": {
+    "name": "Antigravity User"
+  },
+  "license": "MIT"
+}

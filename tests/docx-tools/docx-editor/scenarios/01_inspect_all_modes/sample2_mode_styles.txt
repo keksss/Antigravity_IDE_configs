@@ -1,0 +1,8 @@
+=== DOCX Inspection: file-sample_2.docx ===
+
+Styles in Use:
+  - Heading 1
+  - Heading 2
+  - Normal
+  - Text Body
+  - Title

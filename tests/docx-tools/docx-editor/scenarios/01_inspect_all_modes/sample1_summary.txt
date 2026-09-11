@@ -1,0 +1,11 @@
+=== DOCX Inspection: file-sample_1.docx ===
+Author: N/A | Modified: 2025-06-12 04:29:00+00:00
+Total Paragraphs: 1 | Total Tables: 1 | Images: 2
+
+Styles in Use:
+  - Normal
+
+Document Headings (0):
+
+Tables (1):
+  Table #0: 5 rows x 3 cols [ |  | April 4, 20XX]
