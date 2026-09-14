@@ -29,7 +29,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TESTS_ROOT = REPO_ROOT / "tests"
-UV_PATH = Path(shutil.which("uv") or r"C:\Users\kekss\.local\bin\uv.exe")
+UV_PATH = Path(shutil.which("uv") or (REPO_ROOT / "uv.exe") or (Path.home() / ".local" / "bin" / "uv.exe"))
 
 
 def run_test_script(script_path: Path) -> tuple[int, str]:

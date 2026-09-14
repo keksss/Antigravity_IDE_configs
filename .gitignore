@@ -12,6 +12,8 @@ env/
 .ruff_cache/
 .mypy_cache/
 .uv/
+.uv_cache/
+uv.exe
 
 # Microsoft Office temporary lock and autosave files
 ~$*.docx

@@ -85,7 +85,7 @@ def find_libreoffice_binary() -> Optional[Path]:
     return None
 
 
-def convert_with_word(input_file: Path, output_file: Path, timeout_sec: int = 20) -> bool:
+def convert_with_word(input_file: Path, output_file: Path, timeout_sec: int = 60) -> bool:
     """Convert DOCX to PDF using Word in an isolated subprocess with timeout and process cleanup."""
     system = platform.system()
 
@@ -103,28 +103,40 @@ def convert_with_word(input_file: Path, output_file: Path, timeout_sec: int = 20
 
     # Run isolated Python script with win32com to prevent hanging parent process on modal dialogs
     worker_code = (
-        "import sys\n"
+        "import sys, os\n"
         "from pathlib import Path\n"
         "try:\n"
+        "    import pythoncom\n"
+        "    pythoncom.CoInitialize()\n"
         "    import win32com.client\n"
-        "    w = win32com.client.DispatchEx('Word.Application')\n"
+        "    try:\n"
+        "        w = win32com.client.DispatchEx('Word.Application')\n"
+        "    except Exception:\n"
+        "        w = win32com.client.Dispatch('Word.Application')\n"
         "    w.Visible = False\n"
         "    w.DisplayAlerts = 0\n"
-        "    doc = w.Documents.Open(str(Path(sys.argv[1]).resolve()), ReadOnly=True, ConfirmConversions=False, NoEncodingDialog=True)\n"
-        "    doc.SaveAs(str(Path(sys.argv[2]).resolve()), FileFormat=17)\n"
+        "    in_file = str(Path(sys.argv[1]).resolve())\n"
+        "    out_file = str(Path(sys.argv[2]).resolve())\n"
+        "    doc = w.Documents.Open(in_file, ReadOnly=True, ConfirmConversions=False, NoEncodingDialog=True)\n"
+        "    doc.SaveAs(out_file, FileFormat=17)\n"
         "    doc.Close(False)\n"
         "    w.Quit()\n"
+        "    pythoncom.CoUninitialize()\n"
         "    sys.exit(0)\n"
         "except Exception as e:\n"
         "    sys.stderr.write(str(e))\n"
         "    sys.exit(1)\n"
     )
 
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(sys.path)
+
     try:
         res = subprocess.run(
             [sys.executable, "-c", worker_code, str(input_file.resolve()), str(output_file.resolve())],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=env,
             text=True,
             timeout=timeout_sec,
         )
