@@ -1,0 +1,137 @@
+{
+  "timestamp": "2026-09-14T10:34:44Z",
+  "total_scenarios": 16,
+  "passed": 16,
+  "failed": 0,
+  "total_duration_seconds": 30.39,
+  "results": [
+    {
+      "scenario": "01_inspect_summary",
+      "number": "01",
+      "name": "inspect_summary",
+      "passed": true,
+      "message": "Summary mode accurately parsed sheets, dimensions, and row counts",
+      "duration_sec": 0.64
+    },
+    {
+      "scenario": "02_inspect_preview",
+      "number": "02",
+      "name": "inspect_preview",
+      "passed": true,
+      "message": "Markdown preview generated with accurate cell coordinate headers [A]-[D]",
+      "duration_sec": 0.33
+    },
+    {
+      "scenario": "03_inspect_csv_tsv",
+      "number": "03",
+      "name": "inspect_csv_tsv",
+      "passed": true,
+      "message": "CSV and TSV files inspected with auto-detected delimiters",
+      "duration_sec": 0.24
+    },
+    {
+      "scenario": "04_inspect_formulas",
+      "number": "04",
+      "name": "inspect_formulas",
+      "passed": true,
+      "message": "Found all formulas with exact cell coordinates and expressions",
+      "duration_sec": 0.32
+    },
+    {
+      "scenario": "05_financial_model_styling",
+      "number": "05",
+      "name": "financial_model_styling",
+      "passed": true,
+      "message": "Financial model generated conforming to typography, color coding, and currency rules",
+      "duration_sec": 0.02
+    },
+    {
+      "scenario": "06_recalc_zero_errors",
+      "number": "06",
+      "name": "recalc_zero_errors",
+      "passed": true,
+      "message": "Recalculation succeeded with engine 'ms-excel' and 0 errors",
+      "duration_sec": 3.63
+    },
+    {
+      "scenario": "07_recalc_error_detection",
+      "number": "07",
+      "name": "recalc_error_detection",
+      "passed": true,
+      "message": "Successfully detected 3 formula errors with cell locations",
+      "duration_sec": 3.37
+    },
+    {
+      "scenario": "08_post_2007_functions",
+      "number": "08",
+      "name": "post_2007_functions",
+      "passed": true,
+      "message": "Post-2007 functions (_xlfn.TEXTJOIN, _xlfn.CONCAT, _xlfn.IFS) evaluated without #NAME? errors",
+      "duration_sec": 0.92
+    },
+    {
+      "scenario": "09_cross_sheet_references",
+      "number": "09",
+      "name": "cross_sheet_references",
+      "passed": true,
+      "message": "Cross-sheet references with special characters in sheet name calculated correctly",
+      "duration_sec": 3.36
+    },
+    {
+      "scenario": "10_external_link_protection",
+      "number": "10",
+      "name": "external_link_protection",
+      "passed": true,
+      "message": "External link protection and --force override behave as documented without XML corruption",
+      "duration_sec": 6.49
+    },
+    {
+      "scenario": "11_inplace_edit_backup",
+      "number": "11",
+      "name": "inplace_edit_backup",
+      "passed": true,
+      "message": "In-place modification preserved exact original copy in .bak backup file",
+      "duration_sec": 0.03
+    },
+    {
+      "scenario": "12_xlsm_macro_handling",
+      "number": "12",
+      "name": "xlsm_macro_handling",
+      "passed": true,
+      "message": "Macro workbook handled safely without corrupting XML parts",
+      "duration_sec": 0.01
+    },
+    {
+      "scenario": "13_merged_cells_and_edge_cases",
+      "number": "13",
+      "name": "merged_cells_and_edge_cases",
+      "passed": true,
+      "message": "Merged cells top-left anchor write and zero-value display validated",
+      "duration_sec": 0.36
+    },
+    {
+      "scenario": "14_engine_selection",
+      "number": "14",
+      "name": "engine_selection",
+      "passed": true,
+      "message": "Engine selection validated (Auto resolved to 'ms-excel')",
+      "duration_sec": 6.68
+    },
+    {
+      "scenario": "15_excel_com_validation",
+      "number": "15",
+      "name": "excel_com_validation",
+      "passed": true,
+      "message": "Microsoft Excel COM successfully opened workbook, verified live cell calculations, and generated audit report",
+      "duration_sec": 3.0
+    },
+    {
+      "scenario": "16_json_html_export",
+      "number": "16",
+      "name": "json_html_export",
+      "passed": true,
+      "message": "JSON records, JSON-Grid coordinate mapping, and semantic HTML with merged cell handling verified",
+      "duration_sec": 0.98
+    }
+  ]
+}

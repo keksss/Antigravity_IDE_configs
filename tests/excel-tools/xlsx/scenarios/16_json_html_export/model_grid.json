@@ -1,0 +1,68 @@
+{
+  "sheet": "Projections",
+  "dimensions": "A1:E6",
+  "total_rows": 6,
+  "total_columns": 5,
+  "exported_rows": 6,
+  "exported_columns": 5,
+  "merged_ranges": [],
+  "cells": {
+    "A1": {
+      "v": "Five-Year Financial Model"
+    },
+    "A3": {
+      "v": "Line Item"
+    },
+    "B3": {
+      "v": "FY2024"
+    },
+    "C3": {
+      "v": "FY2025"
+    },
+    "D3": {
+      "v": "FY2026"
+    },
+    "E3": {
+      "v": "Growth Rate"
+    },
+    "A4": {
+      "v": "Revenue"
+    },
+    "B4": {
+      "v": 1250000
+    },
+    "C4": {
+      "f": "=B4*(1+$E$4)"
+    },
+    "D4": {
+      "f": "=C4*(1+$E$4)"
+    },
+    "E4": {
+      "v": 0.125
+    },
+    "A5": {
+      "v": "COGS"
+    },
+    "B5": {
+      "v": 625000
+    },
+    "C5": {
+      "f": "=B5*1.10"
+    },
+    "D5": {
+      "f": "=C5*1.10"
+    },
+    "A6": {
+      "v": "Gross Profit"
+    },
+    "B6": {
+      "f": "=B4-B5"
+    },
+    "C6": {
+      "f": "=C4-C5"
+    },
+    "D6": {
+      "f": "=D4-D5"
+    }
+  }
+}

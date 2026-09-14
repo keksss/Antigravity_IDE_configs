@@ -1,0 +1,9 @@
+{
+  "name": "excel-tools",
+  "version": "1.0.0",
+  "description": "Comprehensive tools for creating, inspecting, editing, formatting, and recalculating Microsoft Excel (.xlsx, .xlsm, .csv) spreadsheets with zero formula errors, OpenXML integrity, universal recalculation (MS Excel / LibreOffice), and financial model styling.",
+  "author": {
+    "name": "Antigravity User"
+  },
+  "license": "MIT"
+}
