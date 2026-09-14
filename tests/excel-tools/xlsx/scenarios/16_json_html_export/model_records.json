@@ -1,0 +1,52 @@
+{
+  "sheet": "Projections",
+  "total_rows": 6,
+  "total_columns": 5,
+  "exported_rows": 5,
+  "records": [
+    {
+      "Five-Year Financial Model": null,
+      "Col_B": null,
+      "Col_C": null,
+      "Col_D": null,
+      "Col_E": null
+    },
+    {
+      "Five-Year Financial Model": "Line Item",
+      "Col_B": "FY2024",
+      "Col_C": "FY2025",
+      "Col_D": "FY2026",
+      "Col_E": "Growth Rate"
+    },
+    {
+      "Five-Year Financial Model": "Revenue",
+      "Col_B": 1250000,
+      "Col_C": null,
+      "Col_D": null,
+      "Col_E": 0.125
+    },
+    {
+      "Five-Year Financial Model": "COGS",
+      "Col_B": 625000,
+      "Col_C": null,
+      "Col_D": null,
+      "Col_E": null
+    },
+    {
+      "Five-Year Financial Model": "Gross Profit",
+      "Col_B": null,
+      "Col_C": null,
+      "Col_D": null,
+      "Col_E": null
+    }
+  ],
+  "formulas": {
+    "C4": "=B4*(1+$E$4)",
+    "D4": "=C4*(1+$E$4)",
+    "C5": "=B5*1.10",
+    "D5": "=C5*1.10",
+    "B6": "=B4-B5",
+    "C6": "=C4-C5",
+    "D6": "=D4-D5"
+  }
+}
