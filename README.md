@@ -49,7 +49,8 @@ Antigravity_IDE_configs/
 ├── files_examples/                        # Эталонные файлы-образцы для тестов (.docx)
 │   ├── file-sample_1.docx
 │   ├── file-sample_2.docx
-│   └── file-sample_3.docx
+│   ├── file-sample_3.docx
+│   └── file-sample_4.docx
 │
 ├── tests/                                 # Изолированная тестовая инфраструктура
 │   ├── README.md                          # Руководство по тестированию

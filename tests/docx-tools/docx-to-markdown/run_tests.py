@@ -49,6 +49,7 @@ EXAMPLES_DIR = REPO_ROOT / "files_examples"
 SAMPLE_1 = EXAMPLES_DIR / "file-sample_1.docx"
 SAMPLE_2 = EXAMPLES_DIR / "file-sample_2.docx"
 SAMPLE_3 = EXAMPLES_DIR / "file-sample_3.docx"
+SAMPLE_4 = EXAMPLES_DIR / "file-sample_4.docx"
 
 TEST_ROOT = Path(__file__).resolve().parent
 SCENARIOS_DIR = TEST_ROOT / "scenarios"
@@ -609,6 +610,108 @@ def scenario_09_cli_and_edge_cases():
 
 
 # =========================================================================
+# Scenario 10: Confluence Export & Dynamic Image Mapping (file-sample_4)
+# =========================================================================
+def scenario_10_confluence_export_with_tmp_images():
+    """Scenario 10: Verify conversion of complex Confluence/Jira export (file-sample_4.docx) with .tmp image rels and repeated images."""
+    folder = SCENARIOS_DIR / "10_confluence_export_with_tmp_images"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    target_file = SAMPLE_4
+    if not target_file.is_file():
+        dl_file = Path.home() / "Downloads" / "CCB-108+Chargeback+Condition+Contract+creation.doc.docx"
+        if dl_file.is_file():
+            shutil.copy2(dl_file, target_file)
+
+    out_md = folder / "file-sample_4_converted.md"
+    media_d = folder / "file-sample_4_media"
+
+    code, stdout, stderr = run_command([
+        str(CONVERT_SCRIPT), str(target_file),
+        "-o", str(out_md),
+        "--media-dir", str(media_d),
+    ])
+
+    all_ok = True
+    notes = []
+    media_files = []
+    tmp_files = []
+    png_files = []
+    img_links = []
+    unresolved = []
+    md_text = ""
+
+    if code != 0 or not out_md.is_file():
+        all_ok = False
+        notes.append(f"Conversion failed with exit code {code}: {stderr}")
+    else:
+        md_text = out_md.read_text(encoding="utf-8")
+
+        # 1. Verify extracted media files
+        media_files = list(media_d.glob("*.*"))
+        tmp_files = list(media_d.glob("*.tmp"))
+        png_files = list(media_d.glob("*.png"))
+
+        if tmp_files:
+            all_ok = False
+            notes.append(f"Found {len(tmp_files)} files with .tmp extension: {[f.name for f in tmp_files]}")
+
+        if len(png_files) != 4:
+            all_ok = False
+            notes.append(f"Expected exactly 4 PNG images, found {len(png_files)}: {[f.name for f in png_files]}")
+
+        # 2. Verify all image links in markdown
+        img_links = re.findall(r"!\[(.*?)\]\(([^\)]+)\)", md_text)
+        if len(img_links) != 5:
+            all_ok = False
+            notes.append(f"Expected 5 image references in markdown, found {len(img_links)}")
+
+        unresolved = [link for _, link in img_links if link.startswith("data:image")]
+        if unresolved:
+            all_ok = False
+            notes.append(f"Found {len(unresolved)} unresolved data:image links in markdown")
+
+        # 3. Check repeated image mapping (rId58 mapped to image_003.png)
+        if "image_003.png" not in md_text:
+            all_ok = False
+            notes.append("Expected image_003.png to be referenced in markdown")
+
+        # 4. Verify GFM tables and structure
+        if "| --- |" not in md_text:
+            all_ok = False
+            notes.append("Markdown does not contain GFM table delimiters (| --- |)")
+
+        # 5. Verify headings & external Jira/Confluence links
+        if "# CCB-108 Chargeback Condition Contract creation" not in md_text:
+            all_ok = False
+            notes.append("Title heading H1 missing or distorted")
+
+        if "breakthrubev.atlassian.net" not in md_text:
+            all_ok = False
+            notes.append("Confluence/Jira hyperlinks were lost")
+
+    rep = f"""# Сценарий 10: Экспорт из Confluence с .tmp изображениями (file-sample_4)
+
+- Документ: `file-sample_4.docx` (экспорт Confluence/Jira `CCB-108`)
+- Извлечение медиафайлов: {'УСПЕХ' if len(media_files) == 4 and not tmp_files else 'ОШИБКА'} ({len(png_files)} PNG, {len(tmp_files)} .tmp)
+- Устранение .tmp расширений: {'УСПЕХ' if not tmp_files else 'ОШИБКА'}
+- Разрешение всех ссылок на изображения: {'УСПЕХ' if not unresolved and len(img_links) == 5 else 'ОШИБКА'} ({len(img_links)} ссылок в md, {len(unresolved)} data:image)
+- Корректный маппинг повторных изображений: {'УСПЕХ' if 'image_003.png' in md_text else 'ОШИБКА'}
+- Таблицы GFM: {'УСПЕХ' if '| --- |' in md_text else 'ОШИБКА'}
+- Внешние ссылки Confluence/Jira: {'УСПЕХ' if 'breakthrubev.atlassian.net' in md_text else 'ОШИБКА'}
+- Замечания: {'; '.join(notes) if notes else 'Нет'}
+- Статус: {'УСПЕХ' if all_ok else 'ОШИБКА'}
+"""
+    (folder / "scenario_report.md").write_text(rep, encoding="utf-8")
+    record_result(
+        "Scenario 10: Confluence Export (file-sample_4)",
+        all_ok,
+        "Converted file-sample_4.docx: 4 PNGs (0 .tmp), 5 image links mapped, GFM tables and links verified",
+        folder
+    )
+
+
+# =========================================================================
 # Main Execution Runner
 # =========================================================================
 def main():
@@ -627,6 +730,7 @@ def main():
     scenario_07_conversion_engines()
     scenario_08_real_world_samples()
     scenario_09_cli_and_edge_cases()
+    scenario_10_confluence_export_with_tmp_images()
 
     # Generate test_summary.json
     all_passed = all(r["passed"] for r in test_results)

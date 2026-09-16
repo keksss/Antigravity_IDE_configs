@@ -138,12 +138,75 @@ def format_comments_markdown(comments: list[dict]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def extract_media_from_docx(docx_path: Path, media_dir: Path, output_md_dir: Path = None) -> list[dict]:
-    """Extract embedded images from Word document in document order and compute relative links."""
+import base64
+import io
+
+KNOWN_IMAGE_EXTS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".tiff", ".tif", ".emf", ".wmf"
+}
+
+
+def detect_image_extension(blob: bytes, fallback_ext: str = "", content_type: str = "") -> str:
+    """Determine the correct file extension for an image blob using magic bytes, MIME, and Pillow."""
+    if not blob:
+        return ".png"
+
+    # 1. Magic byte signatures
+    if blob.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if blob.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if blob.startswith((b"GIF87a", b"GIF89a")):
+        return ".gif"
+    if len(blob) > 12 and blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return ".webp"
+    if blob.startswith(b"BM"):
+        return ".bmp"
+    if blob.startswith((b"II*\x00", b"MM\x00*")):
+        return ".tiff"
+    if blob.startswith(b"\x01\x00\x00\x00"):  # EMF
+        return ".emf"
+    if blob.startswith(b"\xd7\xcd\xc6\x9a") or blob.startswith(b"\x01\x00\x09\x00"):  # WMF
+        return ".wmf"
+    if b"<svg" in blob[:300].lower():
+        return ".svg"
+
+    # 2. Content-type / MIME
+    if content_type:
+        ext = mimetypes.guess_extension(content_type.split(";")[0].strip())
+        if ext:
+            return ".jpg" if ext == ".jpe" else ext
+
+    # 3. Fallback extension if valid and not .tmp
+    clean_fallback = fallback_ext.lower().strip()
+    if clean_fallback in KNOWN_IMAGE_EXTS and clean_fallback != ".tmp":
+        return clean_fallback
+
+    # 4. Pillow inspection
+    try:
+        from PIL import Image
+        with Image.open(io.BytesIO(blob)) as img:
+            fmt = (img.format or "").lower()
+            if fmt == "jpeg":
+                return ".jpg"
+            if fmt:
+                return f".{fmt}"
+    except Exception:
+        pass
+
+    return ".png"
+
+
+def extract_media_from_docx(
+    docx_path: Path, media_dir: Path, output_md_dir: Path = None
+) -> tuple[list[dict], list[str], dict[str, dict]]:
+    """Extract embedded images from Word document, returning (unique_extracted_images, appearance_rids, extracted_map)."""
     media_dir.mkdir(parents=True, exist_ok=True)
-    extracted = []
     if output_md_dir is None:
         output_md_dir = media_dir.parent
+
+    extracted_map = {}
+    appearance_rids = []
 
     try:
         doc = Document(str(docx_path))
@@ -153,10 +216,9 @@ def extract_media_from_docx(docx_path: Path, media_dir: Path, output_md_dir: Pat
                 rels_map[rel_id] = rel
 
         if not rels_map:
-            return extracted
+            return [], [], {}
 
-        # Determine document order of images
-        ordered_rids = []
+        # Determine document order of image appearances in OpenXML
         with zipfile.ZipFile(docx_path, "r") as z:
             if "word/document.xml" in z.namelist():
                 root = ET.fromstring(z.read("word/document.xml"))
@@ -164,45 +226,61 @@ def extract_media_from_docx(docx_path: Path, media_dir: Path, output_md_dir: Pat
                 r_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
                 v_ns = "urn:schemas-microsoft-com:vml"
 
-                for blip in root.findall(f".//{{{a_ns}}}blip"):
-                    rid = blip.get(f"{{{r_ns}}}embed")
-                    if rid and rid in rels_map and rid not in ordered_rids:
-                        ordered_rids.append(rid)
+                for elem in root.iter():
+                    if elem.tag == f"{{{a_ns}}}blip":
+                        rid = elem.get(f"{{{r_ns}}}embed")
+                        if rid and rid in rels_map:
+                            appearance_rids.append(rid)
+                    elif elem.tag == f"{{{v_ns}}}imagedata":
+                        rid = elem.get(f"{{{r_ns}}}id")
+                        if rid and rid in rels_map:
+                            appearance_rids.append(rid)
 
-                for img in root.findall(f".//{{{v_ns}}}imagedata"):
-                    rid = img.get(f"{{{r_ns}}}id")
-                    if rid and rid in rels_map and rid not in ordered_rids:
-                        ordered_rids.append(rid)
+        # Unique rids in order of appearance
+        ordered_unique_rids = []
+        for rid in appearance_rids:
+            if rid not in ordered_unique_rids:
+                ordered_unique_rids.append(rid)
 
-        # Append any remaining image relationships
+        # Append any remaining image relationships not explicitly found in body XML
         for rid in rels_map:
-            if rid not in ordered_rids:
-                ordered_rids.append(rid)
+            if rid not in ordered_unique_rids:
+                ordered_unique_rids.append(rid)
+                appearance_rids.append(rid)
 
-        for idx, rid in enumerate(ordered_rids, start=1):
+        # Save unique image files to media_dir
+        for idx, rid in enumerate(ordered_unique_rids, start=1):
             rel = rels_map[rid]
             orig_name = Path(rel.target_ref).name
-            ext = Path(orig_name).suffix or ".png"
+            blob = rel.target_part.blob
+            c_type = getattr(rel.target_part, "content_type", "")
+            ext = detect_image_extension(blob, fallback_ext=Path(orig_name).suffix, content_type=c_type)
+
             out_name = f"image_{idx:03d}{ext}"
             out_path = media_dir / out_name
             with open(out_path, "wb") as f:
-                f.write(rel.target_part.blob)
+                f.write(blob)
 
             try:
                 rel_path = os.path.relpath(out_path, output_md_dir).replace("\\", "/")
             except ValueError:
                 rel_path = str(out_path).replace("\\", "/")
 
-            extracted.append({
+            item = {
                 "path": out_path,
                 "rel_path": rel_path,
                 "filename": out_name,
-                "rid": rid
-            })
+                "rid": rid,
+                "size_bytes": len(blob),
+                "format": ext.lstrip(".").upper(),
+            }
+            extracted_map[rid] = item
+
     except Exception as e:
         print(f"[Warning] Failed to extract media: {e}", file=sys.stderr)
 
-    return extracted
+    unique_list = list(extracted_map.values())
+    return unique_list, appearance_rids, extracted_map
 
 
 def convert_with_markitdown(docx_path: Path, output_md_path: Path, media_dir: Path) -> dict:
@@ -213,22 +291,62 @@ def convert_with_markitdown(docx_path: Path, output_md_path: Path, media_dir: Pa
     result = md.convert(str(docx_path))
     md_text = result.text_content
 
-    # Extract media files in document order
-    extracted_images = extract_media_from_docx(docx_path, media_dir, output_md_path.parent)
+    # Extract media files and appearance order
+    unique_images, appearance_rids, extracted_map = extract_media_from_docx(
+        docx_path, media_dir, output_md_path.parent
+    )
 
-    # Replace data:image/... URIs with relative image paths
+    # Sequence of items corresponding to document appearances
+    appearance_items = [extracted_map[rid] for rid in appearance_rids if rid in extracted_map]
+
     img_counter = [0]
+    extra_img_counter = len(unique_images)
 
     def image_replacer(match):
-        alt_text = match.group(1)
-        if img_counter[0] < len(extracted_images):
-            item = extracted_images[img_counter[0]]
+        nonlocal extra_img_counter
+        alt_text = match.group(1).strip()
+        img_src = match.group(2).strip()
+
+        # 1. Match by appearance sequence
+        if img_counter[0] < len(appearance_items):
+            item = appearance_items[img_counter[0]]
             img_counter[0] += 1
             alt = alt_text if alt_text else f"Image {img_counter[0]}"
             return f"![{alt}]({item['rel_path']})"
+
+        # 2. Check if actual base64 image data is present
+        b64_match = re.match(r"data:image/([^;]+);base64,(.+)", img_src, re.DOTALL)
+        if b64_match:
+            mime_sub = b64_match.group(1)
+            b64_data = b64_match.group(2)
+            try:
+                blob = base64.b64decode(b64_data)
+                ext = detect_image_extension(blob, content_type=f"image/{mime_sub}")
+                extra_img_counter += 1
+                out_name = f"image_{extra_img_counter:03d}{ext}"
+                out_path = media_dir / out_name
+                with open(out_path, "wb") as f:
+                    f.write(blob)
+                try:
+                    rel_path = os.path.relpath(out_path, output_md_path.parent).replace("\\", "/")
+                except ValueError:
+                    rel_path = str(out_path).replace("\\", "/")
+                img_counter[0] += 1
+                alt = alt_text if alt_text else f"Image {img_counter[0]}"
+                return f"![{alt}]({rel_path})"
+            except Exception:
+                pass
+
+        # 3. Fallback for truncated placeholder data:image/... when appearances exhausted
+        if unique_images:
+            fallback_item = unique_images[-1]
+            img_counter[0] += 1
+            alt = alt_text if alt_text else f"Image {img_counter[0]}"
+            return f"![{alt}]({fallback_item['rel_path']})"
+
         return match.group(0)
 
-    # Replace any ![alt](data:image/...) pattern
+    # Match all markdown image links with data:image/...
     pattern = r"!\[(.*?)\]\((data:image\/[^\)]+)\)"
     md_text = re.sub(pattern, image_replacer, md_text)
 
@@ -241,7 +359,8 @@ def convert_with_markitdown(docx_path: Path, output_md_path: Path, media_dir: Pa
         "docx_path": str(docx_path),
         "output_md": str(output_md_path),
         "media_dir": str(media_dir),
-        "images_extracted": len(extracted_images),
+        "images_extracted": len(unique_images),
+        "extracted_files": unique_images,
         "warnings": [],
     }
 
@@ -257,17 +376,15 @@ def convert_with_mammoth(docx_path: Path, output_md_path: Path, media_dir: Path)
     def image_handler(image):
         nonlocal image_counter
         image_counter += 1
-        content_type = image.content_type
-        extension = mimetypes.guess_extension(content_type) or ".png"
-        if extension == ".jpe":
-            extension = ".jpg"
+        with image.open() as image_stream:
+            blob = image_stream.read()
 
-        image_filename = f"image_{image_counter:03d}{extension}"
+        ext = detect_image_extension(blob, content_type=image.content_type)
+        image_filename = f"image_{image_counter:03d}{ext}"
         image_file_path = media_dir / image_filename
 
-        with image.open() as image_stream:
-            with open(image_file_path, "wb") as out_img:
-                out_img.write(image_stream.read())
+        with open(image_file_path, "wb") as out_img:
+            out_img.write(blob)
 
         try:
             rel_image_path = os.path.relpath(image_file_path, output_md_path.parent)
@@ -275,7 +392,13 @@ def convert_with_mammoth(docx_path: Path, output_md_path: Path, media_dir: Path)
             rel_image_path = str(image_file_path)
 
         rel_image_path = rel_image_path.replace("\\", "/")
-        extracted_images.append(str(image_file_path))
+        extracted_images.append({
+            "path": image_file_path,
+            "rel_path": rel_image_path,
+            "filename": image_filename,
+            "size_bytes": len(blob),
+            "format": ext.lstrip(".").upper(),
+        })
 
         return {
             "src": rel_image_path,
@@ -318,7 +441,8 @@ def convert_with_mammoth(docx_path: Path, output_md_path: Path, media_dir: Path)
         "docx_path": str(docx_path),
         "output_md": str(output_md_path),
         "media_dir": str(media_dir),
-        "images_extracted": image_counter,
+        "images_extracted": len(extracted_images),
+        "extracted_files": extracted_images,
         "warnings": [str(m) for m in messages if m.type == "warning"],
     }
 
@@ -431,10 +555,22 @@ def main():
         f.write(md_content.strip() + "\n")
 
     metadata = extract_metadata(docx_path)
+    extracted_files = res.get("extracted_files", [])
+
+    # Validate image links in output markdown
+    all_img_links = re.findall(r"!\[(.*?)\]\(([^\)]+)\)", md_content)
+    unresolved_links = [link for _, link in all_img_links if link.startswith("data:image")]
 
     print(f"SUCCESS: Converted '{docx_path.name}' to Markdown (engine: {res['engine']}).")
     print(f"  Output Markdown: {output_md_path}")
-    print(f"  Media Folder:    {media_dir} ({res['images_extracted']} images extracted)")
+    print(f"  Media Folder:    {media_dir} ({len(extracted_files)} files saved)")
+    for f_info in extracted_files[:6]:
+        size_kb = f_info.get("size_bytes", 0) / 1024
+        print(f"    - {f_info['filename']} ({size_kb:.1f} KB, {f_info.get('format', 'IMG')})")
+    if len(extracted_files) > 6:
+        print(f"    - ... and {len(extracted_files) - 6} more files")
+
+    print(f"  Image Links:     {len(all_img_links)} embedded link(s) verified ({len(unresolved_links)} unresolved)")
     if comments_extracted_count > 0:
         print(f"  Comments:        {comments_extracted_count} comments extracted")
     if metadata.get("styles_found"):

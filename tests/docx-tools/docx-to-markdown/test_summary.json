@@ -1,7 +1,7 @@
 {
   "skill": "docx-to-markdown",
-  "total_scenarios": 9,
-  "passed_scenarios": 9,
+  "total_scenarios": 10,
+  "passed_scenarios": 10,
   "failed_scenarios": 0,
   "all_passed": true,
   "scenarios": [
@@ -58,6 +58,12 @@
       "passed": true,
       "details": "Verified error handling, nested path creation, minimal docx",
       "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\09_cli_and_edge_cases"
+    },
+    {
+      "scenario": "Scenario 10: Confluence Export (file-sample_4)",
+      "passed": true,
+      "details": "Converted file-sample_4.docx: 4 PNGs (0 .tmp), 5 image links mapped, GFM tables and links verified",
+      "folder": "tests\\docx-tools\\docx-to-markdown\\scenarios\\10_confluence_export_with_tmp_images"
     }
   ]
 }

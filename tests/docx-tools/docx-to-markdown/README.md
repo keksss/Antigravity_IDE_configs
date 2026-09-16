@@ -49,6 +49,7 @@ tests/docx-tools/docx-to-markdown/
 | **07** | `Conversion Engines` | Независимый запуск движков `--engine markitdown`, `--engine mammoth` и режима `auto`. |
 | **08** | `Real Samples Suite` | Сквозной прогон на реальных файлах `file-sample_1.docx`, `file-sample_2.docx`, `file-sample_3.docx`. |
 | **09** | `CLI & Edge Cases` | Обработка несуществующего файла (код 1), автосоздание вложенных путей, обработка минимального документа. |
+| **10** | `Confluence Export (file-sample_4)` | Документ `file-sample_4.docx` (экспорт Confluence/Jira `CCB-108`) с внутренними `.tmp` ресурсами, маппинг повторных изображений (5 ссылок на 4 файла), валидация ссылок, отсутствие inline base64 и GFM-таблицы. |
 
 ---
 

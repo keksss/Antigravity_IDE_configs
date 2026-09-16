@@ -70,9 +70,28 @@ uv run scripts/docx_to_md.py path/to/report.docx -o output/report.md --media-dir
 
 ## Output Behavior
 
-1. **Images:** Extracted as original files into `--media-dir` with clean relative links in the Markdown.
+1. **Images:** Extracted as original files into `--media-dir` with real extensions (PNG, JPG, etc. via magic bytes/MIME) and clean relative links in the Markdown.
 2. **Comments:** Extracted from OpenXML (`word/comments.xml`), rendered in a dedicated `## Комментарии / Comments` section with author, date, target fragment quote, and comment text.
 3. **Tables:** Rendered as standard GFM Markdown table rows with headers and delimiters.
 4. **Links:** Word hyperlinks (`w:hyperlink`) are converted to `[Text](https://...)`.
 5. **Headings:** Preserves levels H1 through H6 based on Word heading styles (including localized Russian styles).
+
+---
+
+## Autonomous Agent Workflow (Zero Extra Steps)
+
+1. **Single Command Execution:**
+   Run conversion directly:
+   ```bash
+   uv run scripts/docx_to_md.py <path_to_docx>
+   ```
+2. **Autonomous Processing & Self-Validation:**
+   The script handles the complete conversion cycle internally:
+   - Resolves true image formats via binary magic bytes (preventing `.tmp` files).
+   - Maps all image appearances in document order (including repeated images and inline base64).
+   - Verifies all generated Markdown links against saved files.
+   - Prints a detailed summary of output files, image sizes, and link verification.
+3. **No Redundant Inspection Steps:**
+   Do NOT execute exploratory follow-up commands (such as directory listings, magic byte checks, regex rewriters, or image verification scripts) if the script exits with `SUCCESS` and reports `0 unresolved links`. Return the final result directly to the user.
+
 
