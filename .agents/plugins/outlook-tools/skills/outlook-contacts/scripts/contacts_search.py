@@ -23,6 +23,74 @@ def parse_args():
     parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
     return parser.parse_args()
 
+CYR_TO_LAT_BASE = {
+    'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+    'ж': 'zh', 'з': 'z', 'и': 'i', 'к': 'k', 'л': 'l', 'м': 'm',
+    'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+    'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+    'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+}
+
+def transliterate(text: str, j_char: str = 'i') -> str:
+    res = []
+    for ch in text:
+        low = ch.lower()
+        if low == 'й':
+            mapped = j_char
+            res.append(mapped.capitalize() if ch.isupper() else mapped)
+        elif low in CYR_TO_LAT_BASE:
+            trans = CYR_TO_LAT_BASE[low]
+            res.append(trans.capitalize() if ch.isupper() else trans)
+        else:
+            res.append(ch)
+    return "".join(res)
+
+def get_query_variants(query: str) -> list[str]:
+    """Generates standard transliteration variants (ISO Slavic 'i' vs ICAO Passport 'y') without hardcoded names."""
+    variants = [query]
+    has_cyrillic = any('\u0400' <= ch <= '\u04FF' for ch in query)
+    if has_cyrillic:
+        # Standard Slavic / Corporate directory convention (й -> i, e.g. Andrei, Sergei, Nikolai)
+        v_i = transliterate(query, j_char='i')
+        if v_i not in variants:
+            variants.append(v_i)
+        # Standard Passport / ICAO convention (й -> y, e.g. Andrey, Sergey, Nikolay)
+        v_y = transliterate(query, j_char='y')
+        if v_y not in variants:
+            variants.append(v_y)
+    return variants
+
+def resolve_smtp_address(namespace, raw_address: str, fallback_name: str = "") -> str:
+    if not raw_address and not fallback_name:
+        return ""
+    if raw_address and "@" in raw_address and not raw_address.startswith("/o="):
+        return raw_address
+
+    lookup_targets = [t for t in [raw_address, fallback_name] if t]
+    for target in lookup_targets:
+        try:
+            rec = namespace.CreateRecipient(target)
+            if rec.Resolve():
+                ae = rec.AddressEntry
+                ex_user = None
+                try:
+                    ex_user = ae.GetExchangeUser()
+                except Exception:
+                    pass
+                if ex_user:
+                    smtp = getattr(ex_user, "PrimarySmtpAddress", "")
+                    if smtp and "@" in smtp:
+                        return smtp
+                try:
+                    smtp = ae.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x39FE001F")
+                    if smtp and "@" in smtp:
+                        return smtp
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    return raw_address
+
 def search_local_contacts(namespace, query: str, limit: int):
     results = []
     seen = set()
@@ -36,7 +104,7 @@ def search_local_contacts(namespace, query: str, limit: int):
         except Exception:
             pass
 
-        q_lower = query.lower()
+        query_variants = [v.lower() for v in get_query_variants(query)]
 
         for folder in folders_to_scan:
             folder_name = folder.Name
@@ -61,14 +129,15 @@ def search_local_contacts(namespace, query: str, limit: int):
                         entry_id = getattr(item, "EntryID", "")
 
                         haystack = f"{full_name} {email1} {email2} {company} {job_title} {dept}".lower()
-                        if q_lower in haystack:
-                            key = (full_name.lower(), (email1 or email2).lower())
+                        if any(v in haystack for v in query_variants):
+                            smtp_email = resolve_smtp_address(namespace, email1 or email2, full_name)
+                            key = (full_name.lower(), smtp_email.lower())
                             if key not in seen:
                                 seen.add(key)
                                 results.append({
                                     "name": full_name,
-                                    "email": email1 or email2,
-                                    "secondary_email": email2 if email1 and email2 != email1 else "",
+                                    "email": smtp_email,
+                                    "secondary_email": resolve_smtp_address(namespace, email2, full_name) if email1 and email2 != email1 else "",
                                     "company": company,
                                     "job_title": job_title,
                                     "department": dept,
@@ -93,36 +162,41 @@ def search_gal(namespace, query: str, limit: int):
     results = []
     seen_emails = set()
 
-    # Strategy 1: Resolve directly as a recipient (fastest for exact names/emails)
-    try:
-        rec = namespace.CreateRecipient(query)
-        if rec.Resolve():
-            ae = rec.AddressEntry
-            ex_user = None
-            try:
-                ex_user = ae.GetExchangeUser()
-            except Exception:
-                pass
+    # Strategy 1: Resolve directly as a recipient using standard transliteration variants
+    lookup_candidates = get_query_variants(query)
 
-            if ex_user:
-                name = getattr(ex_user, "Name", "") or ae.Name
-                email = getattr(ex_user, "PrimarySmtpAddress", "") or ae.Address
-                if email and email.lower() not in seen_emails:
-                    seen_emails.add(email.lower())
-                    results.append({
-                        "name": name,
-                        "email": email,
-                        "secondary_email": "",
-                        "company": getattr(ex_user, "CompanyName", "") or "",
-                        "job_title": getattr(ex_user, "JobTitle", "") or "",
-                        "department": getattr(ex_user, "Department", "") or "",
-                        "business_phone": getattr(ex_user, "BusinessTelephoneNumber", "") or "",
-                        "mobile_phone": getattr(ex_user, "MobileTelephoneNumber", "") or "",
-                        "source": "Exchange GAL",
-                        "entry_id": ae.ID
-                    })
-    except Exception:
-        pass
+    for cand in lookup_candidates:
+        if len(results) >= limit:
+            break
+        try:
+            rec = namespace.CreateRecipient(cand)
+            if rec.Resolve():
+                ae = rec.AddressEntry
+                ex_user = None
+                try:
+                    ex_user = ae.GetExchangeUser()
+                except Exception:
+                    pass
+
+                if ex_user:
+                    name = getattr(ex_user, "Name", "") or ae.Name
+                    email = getattr(ex_user, "PrimarySmtpAddress", "") or ae.Address
+                    if email and email.lower() not in seen_emails:
+                        seen_emails.add(email.lower())
+                        results.append({
+                            "name": name,
+                            "email": email,
+                            "secondary_email": "",
+                            "company": getattr(ex_user, "CompanyName", "") or "",
+                            "job_title": getattr(ex_user, "JobTitle", "") or "",
+                            "department": getattr(ex_user, "Department", "") or "",
+                            "business_phone": getattr(ex_user, "BusinessTelephoneNumber", "") or "",
+                            "mobile_phone": getattr(ex_user, "MobileTelephoneNumber", "") or "",
+                            "source": "Exchange GAL",
+                            "entry_id": ae.ID
+                        })
+        except Exception:
+            pass
 
     # Strategy 2: If we still need more results or query is partial, search AddressLists
     if len(results) < limit:
