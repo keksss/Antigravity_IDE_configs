@@ -1,0 +1,9 @@
+{
+  "name": "outlook-tools",
+  "version": "1.0.0",
+  "description": "Comprehensive tools for Microsoft Outlook desktop via COM automation: email search and reading, folder navigation, draft management and safe sending, calendar management with Teams meetings, and contact lookup (local and GAL).",
+  "author": {
+    "name": "Antigravity User"
+  },
+  "license": "MIT"
+}

@@ -36,3 +36,7 @@ Desktop.ini
 .idea/
 *.swp
 *.swo
+
+# Temporary runtime state and scratch directories
+.scratch/
+.state/
