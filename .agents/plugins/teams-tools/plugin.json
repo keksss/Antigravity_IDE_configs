@@ -1,0 +1,22 @@
+{
+  "name": "teams-tools",
+  "version": "1.0.0",
+  "description": "Microsoft Teams local integration for reading personal/group chats, downloading attachments, and safely sending messages with mandatory human confirmation.",
+  "author": {
+    "name": "Antigravity User"
+  },
+  "license": "MIT",
+  "keywords": [
+    "teams",
+    "тимс",
+    "chat",
+    "чат",
+    "чаты",
+    "messaging",
+    "сообщения",
+    "переписка",
+    "вложения",
+    "attachments",
+    "collaboration"
+  ]
+}

@@ -5,5 +5,10 @@
   "author": {
     "name": "Antigravity User"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "keywords": [
+    "docx",
+    "word",
+    "ворд"
+  ]
 }

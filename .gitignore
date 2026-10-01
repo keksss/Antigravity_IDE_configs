@@ -40,3 +40,7 @@ Desktop.ini
 # Temporary runtime state and scratch directories
 .scratch/
 .state/
+
+# Local chat exports and media dumps
+chat_*.md
+chat_*_media/
