@@ -65,30 +65,36 @@ When a document has been created from Markdown via `markdown-to-docx`, use `docx
 
 ## Safe Editing Operations
 
-All editing commands automatically create a `.docx.bak` backup copy before writing changes.
+By default, running `docx_edit.py` without `--apply` performs a **dry run** (preview) without modifying the document or creating a backup. To actually commit changes, add the `--apply` flag.
+
+All applied editing commands automatically create a `.docx.bak` backup copy before writing changes. If a `.docx.bak` already exists from a prior edit, `docx_edit.py` halts to prevent overwriting the original backup.
 
 ### 1. Replace Text (Preserving Run Formatting)
 Replaces text throughout paragraphs and table cells without losing bold, italic, font colors, or font sizes:
 ```bash
+# Preview changes (dry-run)
 uv run scripts/docx_edit.py contract.docx replace-text --find "ООО Старое Название" --replace "ООО Новое Название"
+
+# Apply changes to document
+uv run scripts/docx_edit.py contract.docx replace-text --find "ООО Старое Название" --replace "ООО Новое Название" --apply
 ```
 
 ### 2. Append Paragraph (Inheriting Styles)
 Appends a new paragraph to the end of the document. If `--style` is omitted, it inherits the style of the last paragraph:
 ```bash
-uv run scripts/docx_edit.py report.docx append-paragraph --text "Документ согласован юридическим отделом." --style "Normal"
+uv run scripts/docx_edit.py report.docx append-paragraph --text "Документ согласован юридическим отделом." --style "Normal" --apply
 ```
 
 ### 3. Insert Paragraph After Specific Anchor / Heading
 Inserts content immediately after a specific heading or anchor paragraph:
 ```bash
-uv run scripts/docx_edit.py spec.docx insert-after --anchor "2. Требования к безопасности" --text "2.1 Все данные должны шифроваться по стандарту AES-256."
+uv run scripts/docx_edit.py spec.docx insert-after --anchor "2. Требования к безопасности" --text "2.1 Все данные должны шифроваться по стандарту AES-256." --apply
 ```
 
 ### 4. Add Row to an Existing Table
 Adds a new row to table `N` (0-indexed), inheriting cell font and borders from the row above:
 ```bash
-uv run scripts/docx_edit.py invoice.docx add-table-row --table-index 0 --values "3" "Консультационные услуги" "1" "50 000"
+uv run scripts/docx_edit.py invoice.docx add-table-row --table-index 0 --values "3" "Консультационные услуги" "1" "50 000" --apply
 ```
 
 ---
@@ -118,4 +124,5 @@ uv run scripts/docx_render.py invoice_tpl.docx --json '{"client": "ООО Ром
 
 | Flag | Description |
 | :--- | :--- |
+| `--apply` | Explicitly apply and save modifications. Without `--apply`, commands run in safe preview (dry-run) mode. |
 | `--no-backup` | Disables automatic creation of `.docx.bak` backup file (not recommended). |

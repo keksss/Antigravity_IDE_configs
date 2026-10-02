@@ -19,7 +19,8 @@ import os
 import platform
 import re
 import shutil
-import subprocess
+# LibreOffice is invoked with separate arguments, without a shell.
+import subprocess  # nosec B404
 import sys
 import tempfile
 import time
@@ -32,8 +33,8 @@ if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError) as exc:
+        print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
 MAX_LOCATIONS = 100
 
@@ -159,20 +160,21 @@ def recalculate_with_excel_com(file_path: Path, timeout_seconds: int = 30) -> Tu
         if workbook is not None:
             try:
                 workbook.Close(SaveChanges=False)
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"Warning: Excel workbook close failed: {exc}", file=sys.stderr)
         if excel is not None:
             try:
                 excel.Quit()
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"Warning: Excel application quit failed: {exc}", file=sys.stderr)
 
 
 def setup_libreoffice_profile(profile_dir: Path, soffice_bin: Path, timeout: int = 15) -> Tuple[Optional[str], Optional[str]]:
     """Initialize a clean temporary LibreOffice user profile with the StarBasic recalculation macro."""
     url = profile_dir.as_uri()
     try:
-        subprocess.run(
+        # soffice executable is resolved to a path; profile URI is one argument.
+        subprocess.run(  # nosec B603
             [
                 str(soffice_bin),
                 "--headless",
@@ -223,7 +225,8 @@ def recalculate_with_libreoffice(file_path: Path, soffice_bin: Path, timeout_sec
         ]
 
         try:
-            res = subprocess.run(
+            # Workbook path and profile URI are separate LibreOffice arguments.
+            res = subprocess.run(  # nosec B603
                 cmd,
                 capture_output=True,
                 text=True,
@@ -402,6 +405,9 @@ def recalculate(file_path: Path, timeout: int = 30, force: bool = False, preferr
             recalc_success, recalc_err = recalculate_with_libreoffice(file_path, lo_binary, timeout)
             if recalc_success:
                 engine_used = "libreoffice"
+
+    if not recalc_success:
+        return {"error": recalc_err or "No recalculation engine available; workbook was not recalculated."}
 
     # Now inspect formula status via openpyxl
     try:

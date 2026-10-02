@@ -21,15 +21,20 @@ if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError) as exc:
+        print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
 
 def create_backup(docx_path: Path) -> Path:
     """Create a .bak copy of the target file before modification."""
     backup_path = docx_path.with_suffix(".docx.bak")
     try:
-        shutil.copy2(docx_path, backup_path)
+        with docx_path.open("rb") as source, backup_path.open("xb") as backup:
+            shutil.copyfileobj(source, backup)
+        shutil.copystat(docx_path, backup_path)
+    except FileExistsError:
+        print(f"Error: Backup already exists: {backup_path}. Preserve or move it before editing.", file=sys.stderr)
+        sys.exit(1)
     except PermissionError:
         print(f"Error: Cannot create backup for '{docx_path.name}'. File may be locked by Word.", file=sys.stderr)
         sys.exit(1)
@@ -111,8 +116,8 @@ def replace_text_in_paragraph(p: Paragraph, find_str: str, replace_str: str) -> 
         if r.text == "":
             try:
                 r._r.getparent().remove(r._r)
-            except Exception:
-                pass
+            except Exception as exc:
+                raise RuntimeError("Failed to remove replaced DOCX run") from exc
 
     return count
 
@@ -237,8 +242,8 @@ def do_add_table_row(doc: Document, table_index: int, values: list) -> bool:
                 # Style inheritance
                 try:
                     tgt_p.style = src_p.style
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"Warning: paragraph style not inherited: {exc}", file=sys.stderr)
 
                 tgt_p.alignment = src_p.alignment
 
@@ -247,8 +252,8 @@ def do_add_table_row(doc: Document, table_index: int, values: list) -> bool:
                     tgt_p.paragraph_format.space_before = src_p.paragraph_format.space_before
                     tgt_p.paragraph_format.space_after = src_p.paragraph_format.space_after
                     tgt_p.paragraph_format.line_spacing = src_p.paragraph_format.line_spacing
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"Warning: paragraph spacing not inherited: {exc}", file=sys.stderr)
 
                 # Font formatting inheritance
                 if src_p.runs and tgt_p.runs:
@@ -275,8 +280,8 @@ def save_document_safely(doc: Document, target_path: Path):
         if temp_path.exists():
             try:
                 temp_path.unlink()
-            except Exception:
-                pass
+            except OSError as exc:
+                print(f"Warning: temporary file cleanup failed: {exc}", file=sys.stderr)
         print(
             f"Error: Permission denied saving '{target_path.name}'.\n"
             f"The file is likely locked by Microsoft Word or another application.\n"
@@ -288,39 +293,43 @@ def save_document_safely(doc: Document, target_path: Path):
         if temp_path.exists():
             try:
                 temp_path.unlink()
-            except Exception:
-                pass
+            except OSError as exc:
+                print(f"Warning: temporary file cleanup failed: {exc}", file=sys.stderr)
         print(f"Error: Failed to save document '{target_path.name}': {e}", file=sys.stderr)
         sys.exit(1)
 
 
 def main():
+    common_opts = argparse.ArgumentParser(add_help=False)
+    common_opts.add_argument("--no-backup", action="store_true", help="Do not create a .bak backup file")
+    common_opts.add_argument("--apply", action="store_true", help="Apply changes; otherwise preview without creating a backup or saving.")
+
     parser = argparse.ArgumentParser(
-        description="Safely modify Microsoft Word (.docx) files without corrupting styles or layout."
+        description="Safely modify Microsoft Word (.docx) files without corrupting styles or layout.",
+        parents=[common_opts],
     )
     parser.add_argument("docx_file", type=Path, help="Path to .docx document to modify")
-    parser.add_argument("--no-backup", action="store_true", help="Do not create a .bak backup file")
 
     subparsers = parser.add_subparsers(dest="action", required=True)
 
     # Subcommand: replace-text
-    p_replace = subparsers.add_parser("replace-text", help="Find and replace text across document")
+    p_replace = subparsers.add_parser("replace-text", parents=[common_opts], help="Find and replace text across document")
     p_replace.add_argument("--find", required=True, help="Text to search for")
     p_replace.add_argument("--replace", required=True, help="Replacement text")
 
     # Subcommand: append-paragraph
-    p_append = subparsers.add_parser("append-paragraph", help="Append paragraph to end of document")
+    p_append = subparsers.add_parser("append-paragraph", parents=[common_opts], help="Append paragraph to end of document")
     p_append.add_argument("--text", required=True, help="Paragraph text to append")
     p_append.add_argument("--style", default=None, help="Existing Word style name (e.g. 'Normal', 'Heading 2')")
 
     # Subcommand: insert-after
-    p_insert = subparsers.add_parser("insert-after", help="Insert paragraph after a specific anchor text")
+    p_insert = subparsers.add_parser("insert-after", parents=[common_opts], help="Insert paragraph after a specific anchor text")
     p_insert.add_argument("--anchor", required=True, help="Text or heading to find as anchor")
     p_insert.add_argument("--text", required=True, help="New paragraph text to insert")
     p_insert.add_argument("--style", default=None, help="Word style name (defaults to anchor paragraph's style)")
 
     # Subcommand: add-table-row
-    p_row = subparsers.add_parser("add-table-row", help="Append a row to a table")
+    p_row = subparsers.add_parser("add-table-row", parents=[common_opts], help="Append a row to a table")
     p_row.add_argument("--table-index", type=int, default=0, help="0-based index of the table")
     p_row.add_argument("--values", nargs="+", required=True, help="Values for table row cells")
 
@@ -331,6 +340,10 @@ def main():
         sys.exit(1)
 
     docx_path = args.docx_file.resolve()
+
+    if not args.apply:
+        print(f"Dry run (no changes): {args.action} on '{docx_path}'")
+        return
 
     # Backup
     if not args.no_backup:

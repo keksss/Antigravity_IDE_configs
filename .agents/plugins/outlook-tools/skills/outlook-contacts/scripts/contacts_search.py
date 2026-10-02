@@ -75,8 +75,8 @@ def resolve_smtp_address(namespace, raw_address: str, fallback_name: str = "") -
                 ex_user = None
                 try:
                     ex_user = ae.GetExchangeUser()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"Warning: Exchange user lookup failed: {exc}", file=sys.stderr)
                 if ex_user:
                     smtp = getattr(ex_user, "PrimarySmtpAddress", "")
                     if smtp and "@" in smtp:
@@ -85,10 +85,10 @@ def resolve_smtp_address(namespace, raw_address: str, fallback_name: str = "") -
                     smtp = ae.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x39FE001F")
                     if smtp and "@" in smtp:
                         return smtp
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as exc:
+                    print(f"Warning: SMTP property lookup failed: {exc}", file=sys.stderr)
+        except Exception as exc:
+            print(f"Warning: recipient lookup failed: {exc}", file=sys.stderr)
     return raw_address
 
 def search_local_contacts(namespace, query: str, limit: int):
@@ -101,8 +101,8 @@ def search_local_contacts(namespace, query: str, limit: int):
         try:
             for sub in contacts_folder.Folders:
                 folders_to_scan.append(sub)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: contact subfolders unavailable: {exc}", file=sys.stderr)
 
         query_variants = [v.lower() for v in get_query_variants(query)]
 
@@ -146,12 +146,14 @@ def search_local_contacts(namespace, query: str, limit: int):
                                     "source": f"Local Contacts ({folder_name})",
                                     "entry_id": entry_id
                                 })
-                    except Exception:
+                    except Exception as exc:
+                        print(f"Warning: contact item skipped: {exc}", file=sys.stderr)
                         continue
-            except Exception:
+            except Exception as exc:
+                print(f"Warning: contact folder skipped: {exc}", file=sys.stderr)
                 continue
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"Warning: contact search unavailable: {exc}", file=sys.stderr)
     return results
 
 def search_gal(namespace, query: str, limit: int):
@@ -175,8 +177,8 @@ def search_gal(namespace, query: str, limit: int):
                 ex_user = None
                 try:
                     ex_user = ae.GetExchangeUser()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"Warning: Exchange user lookup failed: {exc}", file=sys.stderr)
 
                 if ex_user:
                     name = getattr(ex_user, "Name", "") or ae.Name
@@ -195,8 +197,8 @@ def search_gal(namespace, query: str, limit: int):
                             "source": "Exchange GAL",
                             "entry_id": ae.ID
                         })
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: GAL recipient lookup failed: {exc}", file=sys.stderr)
 
     # Strategy 2: If we still need more results or query is partial, search AddressLists
     if len(results) < limit:
@@ -219,8 +221,8 @@ def search_gal(namespace, query: str, limit: int):
                                 ex_user = None
                                 try:
                                     ex_user = entry.GetExchangeUser()
-                                except Exception:
-                                    pass
+                                except Exception as exc:
+                                    print(f"Warning: GAL Exchange user lookup failed: {exc}", file=sys.stderr)
 
                                 if ex_user:
                                     email = getattr(ex_user, "PrimarySmtpAddress", "") or entry.Address
@@ -238,10 +240,11 @@ def search_gal(namespace, query: str, limit: int):
                                             "source": "Exchange GAL",
                                             "entry_id": entry.ID
                                         })
-                        except Exception:
+                        except Exception as exc:
+                            print(f"Warning: GAL entry skipped: {exc}", file=sys.stderr)
                             continue
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: GAL address list unavailable: {exc}", file=sys.stderr)
 
     return results
 
@@ -249,8 +252,8 @@ def main():
     if sys.stdout.encoding != 'utf-8':
         try:
             sys.stdout.reconfigure(encoding='utf-8')
-        except Exception:
-            pass
+        except (AttributeError, OSError, ValueError) as exc:
+            print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
     args = parse_args()
     outlook = None
@@ -322,8 +325,8 @@ def main():
         try:
             import pythoncom
             pythoncom.CoUninitialize()
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: Outlook COM cleanup failed: {exc}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

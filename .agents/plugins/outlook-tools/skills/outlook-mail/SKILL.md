@@ -37,12 +37,18 @@ uv run scripts/mail_search.py [options]
 - `--since <date>`: Start date (`YYYY-MM-DD`, `today`, `yesterday`, `7d`).
 - `--until <date>`: End date (`YYYY-MM-DD`).
 - `--limit <int>`: Max results (default: `20`).
-- `--delete`: Move matching emails to 'Deleted Items' folder (destructive action, requires explicit confirmation).
+- `--delete`: Preview or perform moving matching emails to 'Deleted Items' (destructive action, requires explicit confirmation).
+- `--confirm-delete-ids <ids>`: Comma-separated exact EntryIDs from prior search preview; required to execute `--delete`.
+- `--apply`: Execute confirmed deletion; without `--apply`, `--delete` outputs a dry-run preview.
 - `--format <text|json>`: Format output (`json` for agent processing, `text` for user display).
 
 ### Example
 ```bash
+# Search and preview matching emails
 uv run scripts/mail_search.py --query "Отчет" --since 7d --format json
+
+# Delete matching emails after confirmation (preview first, then apply with confirmed IDs)
+uv run scripts/mail_search.py --query "Спам" --delete --confirm-delete-ids "00000000..." --apply
 ```
 
 ---
@@ -71,6 +77,7 @@ uv run scripts/mail_read.py --id "00000000..." --save-attachments "scratch/attac
 ## 3. Composing and Editing Drafts (`scripts/mail_compose.py`)
 
 Handles creating drafts, iterative modification by ID, and sending.
+By default, running without `--apply` prints a **dry-run preview** without touching Outlook. Pass `--apply` to commit changes.
 
 ```bash
 uv run scripts/mail_compose.py [options]
@@ -83,24 +90,35 @@ uv run scripts/mail_compose.py [options]
 - `--cc <emails>`: CC recipients.
 - `--bcc <emails>`: BCC recipients.
 - `--subject <text>`: Email subject.
-- `--body <text|filepath>`: Message body (or path to text/markdown file).
+- `--body <text|filepath>`: Message body (or path to text/markdown/html file).
 - `--append-body <text>`: Append text to existing draft body.
 - `--html`: Treat body as HTML.
 - `--attachment <path>`: File path to attach (repeatable).
+- `--inline-image <path>`: Path to image to embed inline via CID (repeatable).
 - `--remove-attachment <filename>`: Remove an existing attachment by name.
-- `--draft`: Save as draft (default).
+- `--draft`: Save as draft (default behavior).
 - `--send`: Send the email (**STRICT CONFIRMATION REQUIRED**).
 - `--delete`: Delete the draft (**STRICT CONFIRMATION REQUIRED**).
+- `--apply`: Apply planned changes to Outlook; otherwise runs preview (dry-run).
 - `--format <text|json>`
 
 ### Common Workflows
 
 #### Workflow A: Create Draft
 ```bash
+# Preview draft (dry-run)
 uv run scripts/mail_compose.py \
   --to "partner@example.com" \
   --subject "Встреча по проекту" \
   --body "Добрый день! Направляю статус по задачам..." \
+  --format json
+
+# Save draft in Outlook
+uv run scripts/mail_compose.py \
+  --to "partner@example.com" \
+  --subject "Встреча по проекту" \
+  --body "Добрый день! Направляю статус по задачам..." \
+  --apply \
   --format json
 ```
 
@@ -110,15 +128,16 @@ uv run scripts/mail_compose.py \
   --last-draft \
   --append-body "P.S. Прошу подтвердить участие до пятницы." \
   --cc "manager@example.com" \
+  --apply \
   --format json
 ```
 
 #### Workflow C: Send (Only After User Confirmation)
 ```bash
-uv run scripts/mail_compose.py --last-draft --send
+uv run scripts/mail_compose.py --last-draft --send --apply
 ```
 
 #### Workflow D: Delete Draft (Only After User Confirmation)
 ```bash
-uv run scripts/mail_compose.py --last-draft --delete
+uv run scripts/mail_compose.py --last-draft --delete --apply
 ```

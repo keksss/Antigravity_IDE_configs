@@ -110,5 +110,5 @@ When you need:
    uv run ../docx-editor/scripts/docx_inspect.py output/report.docx --mode styles
 
    # Fine-tune content or replace text in-place
-   uv run ../docx-editor/scripts/docx_edit.py output/report.docx replace-text --find "DRAFT" --replace "APPROVED"
+   uv run ../docx-editor/scripts/docx_edit.py output/report.docx replace-text --find "DRAFT" --replace "APPROVED" --apply
    ```

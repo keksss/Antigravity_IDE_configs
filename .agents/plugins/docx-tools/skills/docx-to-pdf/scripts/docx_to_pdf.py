@@ -11,7 +11,8 @@ import argparse
 import os
 import platform
 import shutil
-import subprocess
+# Isolated Word worker and LibreOffice use argument lists without a shell.
+import subprocess  # nosec B404
 import sys
 import tempfile
 import zipfile
@@ -23,8 +24,8 @@ if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError) as exc:
+        print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
 
 def is_valid_docx(file_path: Path) -> bool:
@@ -105,14 +106,31 @@ def convert_with_word(input_file: Path, output_file: Path, timeout_sec: int = 60
     worker_code = (
         "import sys, os\n"
         "from pathlib import Path\n"
+        "w = None\n"
+        "doc = None\n"
+        "import pythoncom\n"
+        "pythoncom.CoInitialize()\n"
         "try:\n"
-        "    import pythoncom\n"
-        "    pythoncom.CoInitialize()\n"
         "    import win32com.client\n"
+        "    w = win32com.client.DispatchEx('Word.Application')\n"
+        "    import win32process\n"
+        "    hwnd = None\n"
         "    try:\n"
-        "        w = win32com.client.DispatchEx('Word.Application')\n"
+        "        hwnd = getattr(w, 'Hwnd', None)\n"
         "    except Exception:\n"
-        "        w = win32com.client.Dispatch('Word.Application')\n"
+        "        pass\n"
+        "    if not hwnd:\n"
+        "        try:\n"
+        "            import win32gui\n"
+        "            hwnd = win32gui.FindWindow('OpusApp', None)\n"
+        "        except Exception:\n"
+        "            pass\n"
+        "    if hwnd:\n"
+        "        try:\n"
+        "            word_pid = win32process.GetWindowThreadProcessId(hwnd)[1]\n"
+        "            print(f'WORD_PID={word_pid}', flush=True)\n"
+        "        except Exception:\n"
+        "            pass\n"
         "    w.Visible = False\n"
         "    w.DisplayAlerts = 0\n"
         "    in_file = str(Path(sys.argv[1]).resolve())\n"
@@ -120,19 +138,33 @@ def convert_with_word(input_file: Path, output_file: Path, timeout_sec: int = 60
         "    doc = w.Documents.Open(in_file, ReadOnly=True, ConfirmConversions=False, NoEncodingDialog=True)\n"
         "    doc.SaveAs(out_file, FileFormat=17)\n"
         "    doc.Close(False)\n"
+        "    doc = None\n"
         "    w.Quit()\n"
-        "    pythoncom.CoUninitialize()\n"
+        "    w = None\n"
         "    sys.exit(0)\n"
         "except Exception as e:\n"
         "    sys.stderr.write(str(e))\n"
         "    sys.exit(1)\n"
+        "finally:\n"
+        "    try:\n"
+        "        if doc is not None:\n"
+        "            doc.Close(False)\n"
+        "    except Exception as cleanup_error:\n"
+        "        sys.stderr.write(f'Document cleanup failed: {cleanup_error}\\n')\n"
+        "    try:\n"
+        "        if w is not None:\n"
+        "            w.Quit()\n"
+        "    except Exception as cleanup_error:\n"
+        "        sys.stderr.write(f'Word cleanup failed: {cleanup_error}\\n')\n"
+        "    pythoncom.CoUninitialize()\n"
     )
 
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(sys.path)
 
     try:
-        res = subprocess.run(
+        # Fixed Python worker; document paths are separate arguments.
+        res = subprocess.run(  # nosec B603
             [sys.executable, "-c", worker_code, str(input_file.resolve()), str(output_file.resolve())],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -147,12 +179,22 @@ def convert_with_word(input_file: Path, output_file: Path, timeout_sec: int = 60
             if err:
                 print(f"[Word COM Error] {err}", file=sys.stderr)
             return False
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         print(f"[Word COM Warning] Word did not respond within {timeout_sec}s (likely waiting on activation or modal dialog).", file=sys.stderr)
-        try:
-            subprocess.run(["taskkill", "/F", "/IM", "WINWORD.EXE"], capture_output=True)
-        except Exception:
-            pass
+        output = exc.stdout or b""
+        if isinstance(output, bytes):
+            output = output.decode("utf-8", errors="replace")
+        for line in output.splitlines():
+            if line.startswith("WORD_PID=") and line[9:].isdigit():
+                try:
+                    taskkill = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "taskkill.exe"
+                    # Numeric PID only; no wildcard process name.
+                    subprocess.run(  # nosec B603
+                        [str(taskkill), "/F", "/PID", line[9:]], capture_output=True, timeout=10
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+                break
         return False
     except Exception as e:
         print(f"[Word Error] {e}", file=sys.stderr)
@@ -178,7 +220,10 @@ def convert_with_libreoffice(soffice_path: Path, input_file: Path, output_file: 
         ]
 
         try:
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
+            # LibreOffice executable and document paths are separate arguments.
+            res = subprocess.run(  # nosec B603
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120
+            )
             expected_name = input_file.stem + ".pdf"
             default_output = output_dir / expected_name
 

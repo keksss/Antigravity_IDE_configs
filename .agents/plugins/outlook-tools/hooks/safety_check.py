@@ -57,15 +57,16 @@ def main():
         if sys.stdout.encoding != 'utf-8':
             try:
                 sys.stdout.reconfigure(encoding='utf-8')
-            except Exception:
-                pass
+            except (AttributeError, OSError, ValueError) as exc:
+                print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
         raw_input = sys.stdin.read()
         if not raw_input.strip():
-            print(json.dumps({"decision": "allow"}))
-            return
+            raise ValueError("Empty hook input")
 
         payload = json.loads(raw_input)
+        if not isinstance(payload, dict) or not isinstance(payload.get("toolCall"), dict):
+            raise ValueError("Missing toolCall")
         tool_call = payload.get("toolCall", {})
         tool_name = tool_call.get("name", "")
         args = tool_call.get("args", {})
@@ -83,8 +84,7 @@ def main():
 
         print(json.dumps({"decision": "allow"}))
     except Exception as e:
-        # In case of any parsing error, allow standard execution to avoid deadlocking the agent
-        print(json.dumps({"decision": "allow", "reason": f"Hook bypass on error: {str(e)}"}, ensure_ascii=True))
+        print(json.dumps({"decision": "deny", "reason": f"Invalid safety hook input: {e}"}, ensure_ascii=True))
 
 if __name__ == "__main__":
     main()

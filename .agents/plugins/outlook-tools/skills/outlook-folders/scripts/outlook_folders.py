@@ -63,8 +63,8 @@ def inspect_folder(folder, current_depth, max_depth, unread_only):
                 child_data = inspect_folder(sub, current_depth + 1, max_depth, unread_only)
                 if child_data:
                     children.append(child_data)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: folder children unavailable: {exc}", file=sys.stderr)
 
     # If unread_only is True, include this folder if it has unread items or any of its children have unread
     has_unread = unread_items > 0 or any(c["has_unread"] for c in children)
@@ -94,8 +94,8 @@ def main():
     if sys.stdout.encoding != 'utf-8':
         try:
             sys.stdout.reconfigure(encoding='utf-8')
-        except Exception:
-            pass
+        except (AttributeError, OSError, ValueError) as exc:
+            print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
     args = parse_args()
     outlook = None
@@ -153,8 +153,8 @@ def main():
         try:
             import pythoncom
             pythoncom.CoUninitialize()
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: Outlook COM cleanup failed: {exc}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

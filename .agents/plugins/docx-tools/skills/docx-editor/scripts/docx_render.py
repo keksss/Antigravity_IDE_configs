@@ -23,8 +23,8 @@ if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError) as exc:
+        print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
 
 class RobustDocxTemplate(DocxTemplate):
@@ -95,8 +95,8 @@ def render_template(template_path: Path, output_path: Path, context: dict, base_
         if temp_path.exists():
             try:
                 temp_path.unlink()
-            except Exception:
-                pass
+            except OSError as exc:
+                print(f"Warning: temporary file cleanup failed: {exc}", file=sys.stderr)
         print(
             f"Error: Permission denied saving '{output_path.name}'.\n"
             f"The file may be open in Microsoft Word. Please close Word and retry.",

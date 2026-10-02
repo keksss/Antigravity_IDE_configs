@@ -11,7 +11,8 @@
 import argparse
 import os
 import shutil
-import subprocess
+# Pandoc is invoked with separate arguments, without a shell.
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 from PIL import Image
@@ -30,8 +31,8 @@ if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError) as exc:
+        print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
 
 def clear_document_body(doc: Document):
@@ -489,8 +490,8 @@ def render_table(node: SyntaxTreeNode, doc: Document, base_dir: Path):
     table = doc.add_table(rows=num_rows, cols=num_cols)
     try:
         table.style = "Table Grid"
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"Warning: table style unavailable: {exc}", file=sys.stderr)
 
     for r_idx, (cells, is_header) in enumerate(rows_nodes):
         row = table.rows[r_idx]
@@ -609,7 +610,8 @@ def convert_with_pandoc(md_path: Path, output_path: Path, template_path: Path = 
         cmd.extend(["--reference-doc", str(template_path)])
 
     try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+        # Pandoc executable comes from shutil.which; document paths are separate arguments.
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)  # nosec B603
         return res.returncode == 0 and output_path.is_file() and output_path.stat().st_size > 0
     except Exception:
         return False

@@ -12,7 +12,9 @@ When reading, modifying, or creating Microsoft Word (`.docx`) files using the `d
 
 1. **Always Backup Before Editing:**
    - Never perform destructive in-place writes to a `.docx` file without creating a `.bak` backup first.
-   - The editing scripts (`docx_edit.py`) create backups automatically unless explicitly disabled with `--no-backup`. Keep backups enabled for safety.
+   - The editing scripts (`docx_edit.py`) operate by default in preview / dry-run mode and require an explicit `--apply` flag to commit modifications.
+   - When applied, backups (`.docx.bak`) are created automatically unless explicitly disabled with `--no-backup`. Keep backups enabled for safety.
+   - If a `.docx.bak` file already exists, `docx_edit.py` will abort rather than overwrite the prior backup.
 
 2. **Verify File Existence and Integrity:**
    - Before editing, run the inspection script or check that the file is a valid `.docx` archive (ZIP format containing `word/document.xml`).

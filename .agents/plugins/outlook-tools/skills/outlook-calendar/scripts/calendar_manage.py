@@ -28,16 +28,16 @@ def get_state_file() -> Path:
 def save_last_event_id(entry_id: str):
     try:
         get_state_file().write_text(entry_id.strip(), encoding="utf-8")
-    except Exception:
-        pass
+    except OSError as exc:
+        print(f"Warning: event state was not saved: {exc}", file=sys.stderr)
 
 def get_last_event_id() -> str:
     try:
         f = get_state_file()
         if f.exists():
             return f.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
+    except OSError as exc:
+        print(f"Warning: event state could not be read: {exc}", file=sys.stderr)
     return ""
 
 def clear_last_event_id():
@@ -45,8 +45,8 @@ def clear_last_event_id():
         f = get_state_file()
         if f.exists():
             f.unlink()
-    except Exception:
-        pass
+    except OSError as exc:
+        print(f"Warning: event state could not be cleared: {exc}", file=sys.stderr)
 
 def read_body_content(body_arg: str) -> str:
     if not body_arg:
@@ -68,12 +68,6 @@ def read_body_content(body_arg: str) -> str:
                     content = p.read_text(encoding="cp1251")
                 except Exception:
                     content = body_arg
-            # Auto-cleanup temporary file if stored inside .scratch directory
-            if ".scratch" in p.parts:
-                try:
-                    p.unlink()
-                except Exception:
-                    pass
         else:
             content = body_arg
 
@@ -98,7 +92,9 @@ def parse_args():
     parser.add_argument("--send", action="store_true", default=False, help="Send invitations to attendees (requires user confirmation!).")
     parser.add_argument("--cancel", action="store_true", default=False, help="Cancel/delete the meeting (requires user confirmation!).")
     parser.add_argument("--delete", action="store_true", default=False, help="Alias for --cancel.")
+    parser.add_argument("--confirm-cancel-id", default="", help="Exact existing EntryID to confirm --cancel/--delete.")
     parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
+    parser.add_argument("--apply", action="store_true", help="Apply the planned change; otherwise preview without accessing Outlook.")
     return parser.parse_args()
 
 def enable_teams_meeting(appt):
@@ -116,19 +112,47 @@ def enable_teams_meeting(appt):
             appt.Location = "Microsoft Teams Meeting"
         return False
 
+def validate_invitation_recipients(appt):
+    recipients = appt.Recipients
+    if not recipients.ResolveAll() or recipients.Count < 1:
+        raise ValueError("Sending requires at least one resolved Outlook attendee.")
+    for i in range(1, recipients.Count + 1):
+        recipient = recipients.Item(i)
+        entry = getattr(recipient, "AddressEntry", None)
+        if entry is None:
+            raise ValueError(f"Attendee #{i} address entry could not be resolved.")
+        address = ""
+        if getattr(entry, "Type", "") == "EX":
+            exchange_user = entry.GetExchangeUser()
+            address = exchange_user.PrimarySmtpAddress if exchange_user is not None else ""
+        else:
+            address = getattr(entry, "Address", "")
+        if not isinstance(address, str) or not address.strip():
+            raise ValueError("All attendees must have a valid non-empty email address.")
+
 def main():
     if sys.stdout.encoding != 'utf-8':
         try:
             sys.stdout.reconfigure(encoding='utf-8')
-        except Exception:
-            pass
+        except (AttributeError, OSError, ValueError) as exc:
+            print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
     args = parse_args()
+    if not args.apply:
+        plan = {"status": "dry_run", "action": "cancel" if args.cancel or args.delete else "send" if args.send else "save",
+                "entry_id": args.id or None, "subject": args.subject, "start": args.start,
+                "end": args.end, "attendees": args.attendees, "optional_attendees": args.optional_attendees}
+        print(json.dumps(plan, ensure_ascii=False) if args.format == "json" else f"Dry run (no Outlook changes): {plan}")
+        return
     outlook = None
     namespace = None
     appt = None
 
     try:
+        if args.cancel or args.delete:
+            if not args.id or args.confirm_cancel_id != args.id:
+                raise ValueError("Cancellation requires an existing --id and matching --confirm-cancel-id from a prior inspection.")
+
         import win32com.client
         import pythoncom
         pythoncom.CoInitialize()
@@ -163,12 +187,11 @@ def main():
             sub = getattr(appt, "Subject", "")
             if getattr(appt, "MeetingStatus", 0) == 1:
                 # 5 = olMeetingCanceled
-                try:
-                    appt.MeetingStatus = 5
-                    if args.send:
-                        appt.Send()
-                except Exception:
-                    pass
+                if args.send:
+                    validate_invitation_recipients(appt)
+                appt.MeetingStatus = 5
+                if args.send:
+                    appt.Send()
             appt.Delete()
             clear_last_event_id()
             res = {
@@ -232,6 +255,7 @@ def main():
         # Save or Send
         if args.send:
             if getattr(appt, "MeetingStatus", 0) == 1:
+                validate_invitation_recipients(appt)
                 appt.Send()
                 action_status = "invitations_sent"
                 action_msg = "Meeting saved and invitations sent to all attendees."
@@ -292,8 +316,8 @@ def main():
         try:
             import pythoncom
             pythoncom.CoUninitialize()
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: Outlook COM cleanup failed: {exc}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

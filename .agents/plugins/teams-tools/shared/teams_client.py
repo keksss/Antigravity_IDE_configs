@@ -12,13 +12,12 @@ Provides direct, local, safe access to Teams conversations, messages, attachment
 
 import asyncio
 import base64
+import http.client
 import json
 import os
-import urllib.request
+from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-CDP_BASE_URL = "http://127.0.0.1:9222"
 
 class TeamsConnectionError(Exception):
     """Raised when Teams is not running or the CDP port 9222 is closed."""
@@ -29,9 +28,15 @@ def get_active_target() -> Dict[str, Any]:
     Connects to CDP endpoint on port 9222 and selects the active Microsoft Teams page.
     """
     try:
-        req = urllib.request.Request(f"{CDP_BASE_URL}/json", headers={"User-Agent": "TeamsTools/1.0"})
-        with urllib.request.urlopen(req, timeout=3.0) as resp:
-            targets = json.loads(resp.read().decode("utf-8"))
+        connection = http.client.HTTPConnection("127.0.0.1", 9222, timeout=3.0)
+        try:
+            connection.request("GET", "/json", headers={"User-Agent": "TeamsTools/1.0"})
+            response = connection.getresponse()
+            if response.status != 200:
+                raise TeamsConnectionError(f"CDP endpoint returned HTTP {response.status}.")
+            targets = json.loads(response.read().decode("utf-8"))
+        finally:
+            connection.close()
     except Exception as exc:
         raise TeamsConnectionError(
             "Microsoft Teams is not running or port 9222 is not available.\n"
@@ -309,14 +314,49 @@ async def download_attachment_to_file(download_url: str, output_path: str) -> st
     """
     Downloads a chat attachment using active Teams authenticated session and saves locally.
     """
+    max_bytes = 20 * 1024 * 1024
+    parsed = urlsplit(download_url)
+    hostname = (parsed.hostname or "").lower()
+    trusted_domains = ("teams.microsoft.com", "sharepoint.com", "office.com", "office.net")
+    if parsed.scheme != "https" or not any(
+        hostname == domain or hostname.endswith("." + domain) for domain in trusted_domains
+    ):
+        raise ValueError("Attachment URL must use HTTPS on a trusted Microsoft or SharePoint host.")
+    out = Path(output_path).resolve()
+    if out.exists():
+        raise FileExistsError(f"Refusing to overwrite existing attachment: {out}")
     escaped_url = json.dumps(download_url)
     js_code = f"""
     (async () => {{
         const url = {escaped_url};
         try {{
-            const resp = await fetch(url, {{ credentials: 'include' }});
+            const resp = await fetch(url, {{ credentials: 'include', redirect: 'manual' }});
+            if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400)) {{
+                return {{ error: 'Attachment redirect is not allowed.' }};
+            }}
+            const finalUrl = new URL(resp.url);
+            const allowed = ['teams.microsoft.com', 'sharepoint.com', 'office.com', 'office.net'];
+            if (finalUrl.protocol !== 'https:' || !allowed.some(d => finalUrl.hostname === d || finalUrl.hostname.endsWith('.' + d))) {{
+                return {{ error: 'Download redirected to an untrusted host.' }};
+            }}
             if (!resp.ok) return {{ error: 'HTTP ' + resp.status + ' ' + resp.statusText }};
-            const blob = await resp.blob();
+            const maxBytes = {max_bytes};
+            const declaredSize = Number(resp.headers.get('content-length'));
+            if (declaredSize > maxBytes) return {{ error: 'Attachment exceeds size limit.' }};
+            const contentType = resp.headers.get('content-type') || '';
+            if (contentType.toLowerCase().startsWith('text/html')) return {{ error: 'Attachment returned an HTML page.' }};
+            const readerStream = resp.body?.getReader();
+            if (!readerStream) return {{ error: 'Attachment response has no readable body.' }};
+            const chunks = [];
+            let total = 0;
+            while (true) {{
+                const {{ done, value }} = await readerStream.read();
+                if (done) break;
+                total += value.byteLength;
+                if (total > maxBytes) {{ await readerStream.cancel(); return {{ error: 'Attachment exceeds size limit.' }}; }}
+                chunks.push(value);
+            }}
+            const blob = new Blob(chunks);
             return new Promise((resolve) => {{
                 const reader = new FileReader();
                 reader.onloadend = () => {{
@@ -335,19 +375,33 @@ async def download_attachment_to_file(download_url: str, output_path: str) -> st
     if not isinstance(res, dict) or not res.get("success"):
         raise RuntimeError(f"Download failed: {res.get('error') if isinstance(res, dict) else 'Unknown error'}")
 
-    raw_bytes = base64.b64decode(res["base64"])
-    out = Path(output_path).resolve()
+    encoded = res.get("base64")
+    size = res.get("size")
+    if not isinstance(encoded, str) or not isinstance(size, int) or not 0 <= size <= max_bytes or len(encoded) > 4 * ((max_bytes + 2) // 3):
+        raise RuntimeError("Download response has invalid size or encoding.")
+    try:
+        raw_bytes = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise RuntimeError("Download response has invalid base64.") from exc
+    if len(raw_bytes) != size:
+        raise RuntimeError("Download size does not match response.")
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(raw_bytes)
+    with out.open("xb") as output:
+        output.write(raw_bytes)
     return str(out)
 
-async def send_message_to_active_chat(text: str) -> Dict[str, Any]:
+async def send_message_to_active_chat(text: str, expected_chat_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Types text into the active Teams message composer using CKEditor instance and triggers the Send button.
     """
     escaped_text = json.dumps(text)
+    escaped_chat_id = json.dumps(expected_chat_id)
     js_code = f"""
     (() => {{
+        const expectedId = {escaped_chat_id};
+        if (expectedId && decodeURIComponent(window.location.hash).split(/[/?#]/).includes(expectedId) === false) {{
+            return {{ success: false, error: 'Active chat does not match requested chat ID.' }};
+        }}
         const editor = document.querySelector('[data-tid="ckeditor"]');
         if (!editor) return {{ success: false, error: 'Message editor not found in active window.' }};
 
@@ -388,6 +442,6 @@ async def send_message_to_active_chat(text: str) -> Dict[str, Any]:
     }})()
     """
     res = await evaluate_js(js_code, await_promise=False)
-    if isinstance(res, dict) and not res.get("success"):
-        raise RuntimeError(f"Failed to send message: {res.get('error')}")
-    return res or {"success": True}
+    if not isinstance(res, dict) or res.get("success") is not True:
+        raise RuntimeError(f"Failed to send message: {res.get('error') if isinstance(res, dict) else 'Unexpected CDP response'}")
+    return res

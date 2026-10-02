@@ -22,7 +22,7 @@ You must **NEVER** run `message_send.py --confirmed` without explicit, prior use
    {
      "questions": [
        {
-         "question": "Подтвердите отправку сообщения в Microsoft Teams:\n\n**Кому:** Иванов Константин (konstantin.ivanov02@sap.com)\n**Текст:**\n> Привет! Отчет готов.\n",
+         "question": "Подтвердите отправку сообщения в Microsoft Teams:\n\n**Кому:** Алексей Смирнов (alexey.smirnov@company.com)\n**Текст:**\n> Привет! Отчет готов.\n",
          "options": [
            "(Recommended) Отправить сообщение",
            "Отменить / Изменить текст"
@@ -42,13 +42,16 @@ You must **NEVER** run `message_send.py --confirmed` without explicit, prior use
 
 ```bash
 # 1. Dry-run preview (verifies chat resolution without sending)
-uv run scripts/message_send.py --contact "konstantin.ivanov02@sap.com" --message "Привет! Отчет готов."
+uv run scripts/message_send.py --contact "alexey.smirnov@company.com" --message "Привет! Отчет готов."
 
 # 2. Actual sending (ONLY after user confirmation!)
-uv run scripts/message_send.py --contact "konstantin.ivanov02@sap.com" --message "Привет! Отчет готов." --confirmed
+uv run scripts/message_send.py --contact "alexey.smirnov@company.com" --message "Привет! Отчет готов." --confirmed
 
 # 3. Sending by exact Conversation ID
 uv run scripts/message_send.py --chat-id "19:b527dc1b-...@unq.gbl.spaces" --message "Согласовано." --confirmed
+
+# 4. Sending to currently active chat window (contact/chat-id omitted)
+uv run scripts/message_send.py --message "Отчет согласован." --confirmed
 ```
 
 ---

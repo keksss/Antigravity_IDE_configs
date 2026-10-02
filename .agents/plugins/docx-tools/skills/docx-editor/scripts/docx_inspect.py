@@ -18,8 +18,8 @@ if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError) as exc:
+        print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
 
 def get_table_column_count(table) -> int:
@@ -27,8 +27,8 @@ def get_table_column_count(table) -> int:
     # 1. Try table.columns, but catch NotImplementedError / IndexError
     try:
         return len(table.columns)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"Warning: table columns unavailable: {exc}", file=sys.stderr)
 
     # 2. Check XML tblGrid definition
     try:
@@ -37,8 +37,8 @@ def get_table_column_count(table) -> int:
             gridCols = tblGrid.findall(qn("w:gridCol"))
             if gridCols:
                 return len(gridCols)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"Warning: table grid unavailable: {exc}", file=sys.stderr)
 
     # 3. Fallback to maximum number of cells across rows
     if table.rows:
@@ -121,8 +121,8 @@ def inspect_document(docx_path: Path, mode: str = "summary") -> dict:
         if t.rows:
             try:
                 header_row = [cell.text.strip().replace("\n", " ") for cell in t.rows[0].cells]
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"Warning: table header unavailable: {exc}", file=sys.stderr)
 
         cols_count = get_table_column_count(t)
         tables_info.append({

@@ -88,8 +88,8 @@ def main():
     if sys.stdout.encoding != 'utf-8':
         try:
             sys.stdout.reconfigure(encoding='utf-8')
-        except Exception:
-            pass
+        except (AttributeError, OSError, ValueError) as exc:
+            print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
     args = parse_args()
     outlook = None
@@ -138,13 +138,15 @@ def main():
                 # Class 26 is olAppointment
                 if item.Class != 26:
                     continue
-            except Exception:
+            except Exception as exc:
+                print(f"Warning: calendar item class unavailable: {exc}", file=sys.stderr)
                 continue
 
             try:
                 item_start = dt_parser.parse(str(item.Start))
                 item_end = dt_parser.parse(str(item.End))
-            except Exception:
+            except Exception as exc:
+                print(f"Warning: calendar item dates unavailable: {exc}", file=sys.stderr)
                 continue
 
             # Double check boundary in Python
@@ -242,8 +244,8 @@ def main():
         try:
             import pythoncom
             pythoncom.CoUninitialize()
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: Outlook COM cleanup failed: {exc}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

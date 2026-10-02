@@ -25,7 +25,7 @@ import teams_client
 def parse_args():
     parser = argparse.ArgumentParser(description="Safely send a message to a Teams chat.")
     parser.add_argument("--message", type=str, required=True, help="Message text to send.")
-    parser.add_argument("--contact", type=str, default=None, help="Target contact name or email (e.g. 'konstantin.ivanov02@sap.com').")
+    parser.add_argument("--contact", type=str, default=None, help="Target contact name or email.")
     parser.add_argument("--chat-id", type=str, default=None, help="Target conversation ID.")
     parser.add_argument("--confirmed", action="store_true", help="Explicit human confirmation flag. Required to actually send.")
     return parser.parse_args()
@@ -79,7 +79,7 @@ async def main():
 
     try:
         # If target is specific chat and not already active, navigate to it
-        if target_id != "active" and "@" in target_id:
+        if target_id != "active":
             nav_js = f"""
             (() => {{
                 window.location.hash = '#/conversations/' + encodeURIComponent({json.dumps(target_id)});
@@ -89,7 +89,7 @@ async def main():
             await teams_client.evaluate_js(nav_js, await_promise=False)
             await asyncio.sleep(0.5)
 
-        res = await teams_client.send_message_to_active_chat(args.message)
+        await teams_client.send_message_to_active_chat(args.message, expected_chat_id=target_id)
         print("✅ Сообщение успешно отправлено в Microsoft Teams!")
         print(f"   Длина текста: {len(args.message)} символов.")
     except teams_client.TeamsConnectionError as err:

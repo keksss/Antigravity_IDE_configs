@@ -27,16 +27,16 @@ def get_state_file() -> Path:
 def save_last_draft_id(entry_id: str):
     try:
         get_state_file().write_text(entry_id.strip(), encoding="utf-8")
-    except Exception:
-        pass
+    except OSError as exc:
+        print(f"Warning: draft state was not saved: {exc}", file=sys.stderr)
 
 def get_last_draft_id() -> str:
     try:
         f = get_state_file()
         if f.exists():
             return f.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
+    except OSError as exc:
+        print(f"Warning: draft state could not be read: {exc}", file=sys.stderr)
     return ""
 
 def clear_last_draft_id():
@@ -44,8 +44,8 @@ def clear_last_draft_id():
         f = get_state_file()
         if f.exists():
             f.unlink()
-    except Exception:
-        pass
+    except OSError as exc:
+        print(f"Warning: draft state could not be cleared: {exc}", file=sys.stderr)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Compose, edit drafts, or send emails via Outlook.")
@@ -65,7 +65,35 @@ def parse_args():
     parser.add_argument("--send", action="store_true", default=False, help="Send the email (requires user confirmation!).")
     parser.add_argument("--delete", action="store_true", default=False, help="Delete the draft email (requires user confirmation!).")
     parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
+    parser.add_argument("--apply", action="store_true", help="Apply the planned change; otherwise preview without accessing Outlook.")
     return parser.parse_args()
+
+def validate_mail_action(mail_item, is_update: bool, deleting: bool, sending: bool):
+    if getattr(mail_item, "Class", None) != 43:
+        raise ValueError("EntryID must refer to a mail item.")
+    if (deleting or sending) and is_update and getattr(mail_item, "Sent", True):
+        raise ValueError("Only unsent drafts may be sent or deleted by this command.")
+    if deleting and not is_update:
+        raise ValueError("Deleting a draft requires an explicit --id or --last-draft.")
+
+def validate_send_recipients(mail_item):
+    recipients = mail_item.Recipients
+    if not recipients.ResolveAll() or recipients.Count < 1:
+        raise ValueError("Sending requires at least one resolved Outlook recipient.")
+    for i in range(1, recipients.Count + 1):
+        recipient = recipients.Item(i)
+        entry = getattr(recipient, "AddressEntry", None)
+        if entry is None:
+            raise ValueError(f"Recipient #{i} address entry could not be resolved.")
+        address = ""
+        if getattr(entry, "Type", "") == "EX":
+            exchange_user = entry.GetExchangeUser()
+            if exchange_user is not None:
+                address = exchange_user.PrimarySmtpAddress
+        else:
+            address = getattr(entry, "Address", "")
+        if not isinstance(address, str) or not address.strip():
+            raise ValueError("All recipients must have a valid non-empty email address.")
 
 def read_body_content(body_arg: str) -> str:
     if not body_arg:
@@ -89,12 +117,6 @@ def read_body_content(body_arg: str) -> str:
                     content = p.read_text(encoding="cp1251")
                 except Exception:
                     content = body_arg
-            # Auto-cleanup temporary file if stored inside .scratch directory
-            if ".scratch" in p.parts:
-                try:
-                    p.unlink()
-                except Exception:
-                    pass
         else:
             content = body_arg
 
@@ -106,10 +128,16 @@ def main():
     if sys.stdout.encoding != 'utf-8':
         try:
             sys.stdout.reconfigure(encoding='utf-8')
-        except Exception:
-            pass
+        except (AttributeError, OSError, ValueError) as exc:
+            print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
     args = parse_args()
+    if not args.apply:
+        plan = {"status": "dry_run", "action": "delete" if args.delete else "send" if args.send else "save_draft",
+                "entry_id": args.id or None, "to": args.to, "cc": args.cc, "bcc": args.bcc,
+                "subject": args.subject, "attachments": args.attachment, "inline_images": args.inline_image}
+        print(json.dumps(plan, ensure_ascii=False) if args.format == "json" else f"Dry run (no Outlook changes): {plan}")
+        return
     outlook = None
     namespace = None
     mail_item = None
@@ -139,6 +167,8 @@ def main():
         else:
             # Create new mail item (0 = olMailItem)
             mail_item = outlook.CreateItem(0)
+
+        validate_mail_action(mail_item, is_update, args.delete, args.send)
 
         # Handle deletion
         if args.delete:
@@ -197,8 +227,8 @@ def main():
             try:
                 # 0x3712001F is PR_ATTACH_CONTENT_ID
                 att.PropertyAccessor.SetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F", cid_name)
-            except Exception:
-                pass
+            except Exception as exc:
+                raise RuntimeError("Could not set inline image content ID") from exc
 
         if args.remove_attachment:
             target_name = args.remove_attachment.lower()
@@ -211,6 +241,7 @@ def main():
         # Handle Action: Send vs Save Draft
         if args.send:
             # Perform sending
+            validate_send_recipients(mail_item)
             current_to = getattr(mail_item, "To", "")
             current_cc = getattr(mail_item, "CC", "")
             current_sub = getattr(mail_item, "Subject", "")
@@ -280,8 +311,8 @@ def main():
         try:
             import pythoncom
             pythoncom.CoUninitialize()
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: Outlook COM cleanup failed: {exc}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

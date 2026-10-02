@@ -2,6 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "python-docx>=1.1.2",
+#     "defusedxml>=0.7.1",
 #     "mammoth>=1.8.0",
 #     "markitdown[docx]>=0.0.1a4",
 #     "Pillow>=10.0.0",
@@ -14,7 +15,7 @@ import mimetypes
 import os
 import re
 import sys
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 import zipfile
 from pathlib import Path
 from docx import Document
@@ -24,8 +25,8 @@ if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+    except (AttributeError, OSError, ValueError) as exc:
+        print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
 
 def sanitize_filename(name: str) -> str:
@@ -191,8 +192,8 @@ def detect_image_extension(blob: bytes, fallback_ext: str = "", content_type: st
                 return ".jpg"
             if fmt:
                 return f".{fmt}"
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"Warning: image extension unavailable: {exc}", file=sys.stderr)
 
     return ".png"
 
@@ -334,8 +335,8 @@ def convert_with_markitdown(docx_path: Path, output_md_path: Path, media_dir: Pa
                 img_counter[0] += 1
                 alt = alt_text if alt_text else f"Image {img_counter[0]}"
                 return f"![{alt}]({rel_path})"
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"Warning: image extraction failed: {exc}", file=sys.stderr)
 
         # 3. Fallback for truncated placeholder data:image/... when appearances exhausted
         if unique_images:

@@ -29,8 +29,8 @@ def main():
     if sys.stdout.encoding != 'utf-8':
         try:
             sys.stdout.reconfigure(encoding='utf-8')
-        except Exception:
-            pass
+        except (AttributeError, OSError, ValueError) as exc:
+            print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
     args = parse_args()
     outlook = None
@@ -57,8 +57,8 @@ def main():
         sender_email = ""
         try:
             sender_email = getattr(item, "SenderEmailAddress", "") or ""
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: sender address unavailable: {exc}", file=sys.stderr)
 
         to_recipients = getattr(item, "To", "") or ""
         cc_recipients = getattr(item, "CC", "") or ""
@@ -156,8 +156,8 @@ def main():
         try:
             import pythoncom
             pythoncom.CoUninitialize()
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: Outlook COM cleanup failed: {exc}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

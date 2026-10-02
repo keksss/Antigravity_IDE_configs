@@ -29,6 +29,8 @@ def parse_args():
     parser.add_argument("--until", type=str, default="", help="End date (YYYY-MM-DD).")
     parser.add_argument("--limit", type=int, default=20, help="Maximum number of emails to return (default: 20).")
     parser.add_argument("--delete", action="store_true", help="Delete matching emails (moves them to 'Deleted Items' folder). Requires confirmation.")
+    parser.add_argument("--confirm-delete-ids", default="", help="Comma-separated exact EntryIDs from a prior search; required with --delete.")
+    parser.add_argument("--apply", action="store_true", help="Execute a confirmed deletion; --delete alone only previews matching IDs.")
     parser.add_argument("--format", choices=["text", "json"], default="text", help="Output format.")
     return parser.parse_args()
 
@@ -78,8 +80,8 @@ def resolve_folder(namespace, folder_spec: str):
         for sub in inbox.Folders:
             if sub.Name.lower() == spec_lower:
                 return sub
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"Warning: inbox folder lookup failed: {exc}", file=sys.stderr)
 
     # Try path traversal if path contains separators
     parts = [p.strip() for p in folder_spec.replace("\\", "/").split("/") if p.strip()]
@@ -94,8 +96,8 @@ def resolve_folder(namespace, folder_spec: str):
                         if sub.Name.lower() == part.lower():
                             child_found = sub
                             break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"Warning: folder traversal failed: {exc}", file=sys.stderr)
                 if child_found:
                     current = child_found
                 else:
@@ -118,8 +120,8 @@ def resolve_folder(namespace, folder_spec: str):
                     for sub in f.Folders:
                         if sub.Name.lower() == single_name:
                             return sub
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"Warning: nested folder lookup failed: {exc}", file=sys.stderr)
 
             # 3. Fallback for common plural/singular variations (e.g. sap_projects -> sap_project)
             variants = [single_name[:-1]] if single_name.endswith('s') else [single_name + 's']
@@ -131,10 +133,10 @@ def resolve_folder(namespace, folder_spec: str):
                         for sub in f.Folders:
                             if sub.Name.lower() == v:
                                 return sub
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except Exception as exc:
+                        print(f"Warning: variant folder lookup failed: {exc}", file=sys.stderr)
+        except Exception as exc:
+            print(f"Warning: mailbox folder lookup failed: {exc}", file=sys.stderr)
 
     # STRICT SAFETY: NEVER silently fallback to inbox!
     raise ValueError(
@@ -146,8 +148,8 @@ def main():
     if sys.stdout.encoding != 'utf-8':
         try:
             sys.stdout.reconfigure(encoding='utf-8')
-        except Exception:
-            pass
+        except (AttributeError, OSError, ValueError) as exc:
+            print(f"Warning: UTF-8 console configuration failed: {exc}", file=sys.stderr)
 
     args = parse_args()
     outlook = None
@@ -170,8 +172,8 @@ def main():
         # We sort by ReceivedTime descending
         try:
             items.Sort("[ReceivedTime]", True)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: message sorting failed: {exc}", file=sys.stderr)
 
         # Apply basic Jet restrict for speed if unread or date is given
         since_dt = parse_relative_date(args.since)
@@ -191,9 +193,9 @@ def main():
             try:
                 items = items.Restrict(filter_str)
                 items.Sort("[ReceivedTime]", True)
-            except Exception:
-                # If restrict fails, fallback to iterating
-                pass
+            except Exception as exc:
+                print(f"Warning: Outlook restriction failed; filtering locally: {exc}", file=sys.stderr)
+                items = folder.Items
 
         results = []
         query_lower = args.query.lower() if args.query else ""
@@ -209,7 +211,8 @@ def main():
             try:
                 if item.Class != 43:
                     continue
-            except Exception:
+            except Exception as exc:
+                print(f"Warning: message class unavailable: {exc}", file=sys.stderr)
                 continue
 
             try:
@@ -218,16 +221,30 @@ def main():
                 sender_email = ""
                 try:
                     sender_email = item.SenderEmailAddress or ""
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(f"Warning: sender address unavailable: {exc}", file=sys.stderr)
 
                 body = item.Body or ""
                 has_attachments = item.Attachments.Count > 0 if hasattr(item, "Attachments") else False
                 unread = item.UnRead
                 rec_time = str(item.ReceivedTime) if hasattr(item, "ReceivedTime") else ""
                 entry_id = item.EntryID
-            except Exception:
+            except Exception as exc:
+                print(f"Warning: message metadata unavailable: {exc}", file=sys.stderr)
                 continue
+
+            if args.unread and not unread:
+                continue
+            if since_dt or until_dt:
+                try:
+                    received_dt = dt_parser.parse(rec_time)
+                    if received_dt.tzinfo:
+                        received_dt = received_dt.replace(tzinfo=None)
+                except (TypeError, ValueError, OverflowError) as exc:
+                    print(f"Warning: message date unavailable: {exc}", file=sys.stderr)
+                    continue
+                if (since_dt and received_dt < since_dt) or (until_dt and received_dt > until_dt):
+                    continue
 
             # Check query filter
             if query_lower and (query_lower not in subject.lower() and query_lower not in body.lower()):
@@ -261,6 +278,14 @@ def main():
             count += 1
 
         if args.delete:
+            if not args.apply:
+                plan = {"status": "dry_run", "folder": folder.Name, "count": len(results), "messages": results}
+                print(json.dumps(plan, indent=2, ensure_ascii=False) if args.format == "json" else f"Deletion preview (no changes): {plan}")
+                return
+            expected_ids = [entry_id.strip() for entry_id in args.confirm_delete_ids.split(",") if entry_id.strip()]
+            actual_ids = [msg["entry_id"] for msg in results]
+            if not expected_ids or len(set(expected_ids)) != len(expected_ids) or set(expected_ids) != set(actual_ids):
+                raise ValueError("Deletion requires --confirm-delete-ids matching exactly the current search results. Run without --delete to preview first.")
             deleted_count = 0
             deleted_items = []
             for msg in results:
@@ -324,8 +349,8 @@ def main():
         try:
             import pythoncom
             pythoncom.CoUninitialize()
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Warning: Outlook COM cleanup failed: {exc}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

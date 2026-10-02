@@ -55,6 +55,7 @@ uv run scripts/calendar_read.py --start "2026-10-05 09:00" --end "2026-10-09 18:
 ## 2. Creating and Managing Meetings (`scripts/calendar_manage.py`)
 
 Create appointments, schedule online Teams meetings, update existing events by EntryID, or cancel meetings.
+By default, running without `--apply` prints a **dry-run preview** without touching Outlook. Pass `--apply` to commit changes.
 
 ```bash
 uv run scripts/calendar_manage.py [options]
@@ -76,16 +77,27 @@ uv run scripts/calendar_manage.py [options]
 - `--save-draft`: Save to calendar without broadcasting invitations (default).
 - `--send`: Send invitations to all attendees (**CONFIRMATION REQUIRED**).
 - `--cancel` / `--delete`: Cancel/remove the meeting (**CONFIRMATION REQUIRED**).
+- `--confirm-cancel-id <entry_id>`: Exact existing EntryID to confirm `--cancel`/`--delete`.
+- `--apply`: Apply planned changes to Outlook; otherwise runs preview (dry-run).
 - `--format <text|json>`
 
 ### Common Workflows
 
 #### Workflow A: Schedule a Personal Appointment
 ```bash
+# Preview appointment (dry-run)
 uv run scripts/calendar_manage.py \
   --subject "Подготовка квартального отчета" \
   --start "2026-10-02 14:00" \
   --duration 60 \
+  --format json
+
+# Create appointment in Outlook
+uv run scripts/calendar_manage.py \
+  --subject "Подготовка квартального отчета" \
+  --start "2026-10-02 14:00" \
+  --duration 60 \
+  --apply \
   --format json
 ```
 
@@ -98,15 +110,16 @@ uv run scripts/calendar_manage.py \
   --attendees "developer@example.com, tester@example.com" \
   --teams \
   --body "Обсуждение блокеров и плана тестирования." \
+  --apply \
   --format json
 ```
 
 #### Workflow C: Send Invitations (Using `--last-event`)
 ```bash
-uv run scripts/calendar_manage.py --last-event --send
+uv run scripts/calendar_manage.py --last-event --send --apply
 ```
 
-#### Workflow D: Cancel a Meeting (Using `--last-event`)
+#### Workflow D: Cancel a Meeting (Requires Exact ID and Confirmation)
 ```bash
-uv run scripts/calendar_manage.py --last-event --cancel
+uv run scripts/calendar_manage.py --id "<entry_id>" --confirm-cancel-id "<entry_id>" --cancel --apply
 ```

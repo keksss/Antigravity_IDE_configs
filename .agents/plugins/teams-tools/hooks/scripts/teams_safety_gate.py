@@ -15,10 +15,11 @@ def main():
     try:
         raw_input = sys.stdin.read()
         if not raw_input.strip():
-            print(json.dumps({"decision": "allow"}))
-            return
+            raise ValueError("Empty hook input")
 
         payload = json.loads(raw_input)
+        if not isinstance(payload, dict) or not isinstance(payload.get("toolCall"), dict):
+            raise ValueError("Missing toolCall")
         tool_call = payload.get("toolCall", {})
         tool_name = tool_call.get("name", "")
         args = tool_call.get("args", {})
@@ -35,7 +36,7 @@ def main():
         # 2. Enforce Confirmation on Send Message:
         # If --confirmed is missing, hard DENY (agent MUST ask via ask_question first).
         # If --confirmed is present, ALLOW immediately (user has already approved via interactive UI).
-        if "message_send.py" in cmd:
+        if "message_send.py" in cmd and any(kw in cmd for kw in ("python", "uv")):
             if "--confirmed" not in cmd:
                 print(json.dumps({
                     "decision": "deny",
@@ -47,8 +48,8 @@ def main():
                 return
 
         print(json.dumps({"decision": "allow"}))
-    except Exception:
-        print(json.dumps({"decision": "allow"}))
+    except Exception as error:
+        print(json.dumps({"decision": "deny", "reason": f"Invalid safety hook input: {error}"}))
 
 if __name__ == "__main__":
     main()

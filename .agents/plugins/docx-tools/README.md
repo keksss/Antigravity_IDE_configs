@@ -6,7 +6,7 @@ A modular, portable Antigravity plugin for working with Microsoft Word (`.docx`)
 
 ## Skills in this Plugin
 
-This plugin follows the **Single Responsibility** principle and is split into three focused skills:
+This plugin follows the **Single Responsibility** principle and is split into four focused skills:
 
 | Skill | Directory | Description |
 | :--- | :--- | :--- |
@@ -80,11 +80,11 @@ uv run skills/markdown-to-docx/scripts/md_to_docx.py report.md --template templa
 # Inspect headings, styles, and tables safely
 uv run skills/docx-editor/scripts/docx_inspect.py spec.docx --mode outline
 
-# Replace text safely across all runs, headers, and tables
-uv run skills/docx-editor/scripts/docx_edit.py spec.docx replace-text --find "Версия 1.0" --replace "Версия 2.0"
+# Replace text safely (add --apply to write changes; omit for preview dry-run)
+uv run skills/docx-editor/scripts/docx_edit.py spec.docx replace-text --find "Версия 1.0" --replace "Версия 2.0" --apply
 
 # Append text matching the document's style
-uv run skills/docx-editor/scripts/docx_edit.py spec.docx append-paragraph --text "Финальное примечание."
+uv run skills/docx-editor/scripts/docx_edit.py spec.docx append-paragraph --text "Финальное примечание." --apply
 ```
 
 ### 4. Template-Based Document Generation (docxtpl)
@@ -98,7 +98,7 @@ uv run skills/docx-editor/scripts/docx_render.py template.docx -d context.json -
 
 ### 5. Convert DOCX to PDF
 ```bash
-# Default conversion (Word COM with 20s timeout or LibreOffice headless)
+# Default conversion (Word COM with process isolation or LibreOffice headless)
 uv run skills/docx-to-pdf/scripts/docx_to_pdf.py report.docx
 
 # Custom output path or batch folder conversion
