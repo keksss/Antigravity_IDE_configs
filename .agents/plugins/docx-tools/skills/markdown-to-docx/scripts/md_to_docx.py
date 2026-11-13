@@ -9,7 +9,9 @@
 """Convert Markdown (.md) documents to Microsoft Word (.docx) with 100% syntax coverage and optional template styling."""
 
 import argparse
+import html
 import os
+import re
 import shutil
 # Pandoc is invoked with separate arguments, without a shell.
 import subprocess  # nosec B404
@@ -19,7 +21,7 @@ from PIL import Image
 import docx
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from docx.opc.constants import RELATIONSHIP_TYPE
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -60,6 +62,787 @@ def extract_plain_text(node) -> str:
     for c in children:
         texts.append(extract_plain_text(c))
     return "".join(texts)
+
+
+# ---------------------------------------------------------------------------
+# Special Symbols, LaTeX / Math, HTML Entities, Emoji & Typography Handling
+# ---------------------------------------------------------------------------
+
+LATEX_SYMBOLS: dict[str, str] = {
+    # Arrows
+    r"\Longleftrightarrow": "⟺",
+    r"\longleftrightarrow": "⟷",
+    r"\Longrightarrow": "⟹",
+    r"\Longleftarrow": "⟸",
+    r"\longrightarrow": "→",
+    r"\longleftarrow": "←",
+    r"\longmapsto": "↦",
+    r"\Leftrightarrow": "⇔",
+    r"\leftrightarrow": "↔",
+    r"\rightleftharpoons": "⇌",
+    r"\leftrightarrows": "⇆",
+    r"\rightleftarrows": "⇄",
+    r"\Rightarrow": "⇒",
+    r"\Leftarrow": "⇐",
+    r"\rightarrow": "→",
+    r"\leftarrow": "←",
+    r"\Uparrow": "⇑",
+    r"\Downarrow": "⇓",
+    r"\Updownarrow": "⇕",
+    r"\uparrow": "↑",
+    r"\downarrow": "↓",
+    r"\updownarrow": "↕",
+    r"\upuparrows": "⇈",
+    r"\downdownarrows": "⇊",
+    r"\nearrow": "↗",
+    r"\searrow": "↘",
+    r"\swarrow": "↙",
+    r"\nwarrow": "↖",
+    r"\hookrightarrow": "↪",
+    r"\hookleftarrow": "↩",
+    r"\mapsto": "↦",
+    r"\implies": "⇒",
+    r"\impliedby": "⇐",
+    r"\iff": "⇔",
+    r"\to": "→",
+    r"\gets": "←",
+    r"\rightharpoonup": "⇀",
+    r"\rightharpoondown": "⇁",
+    r"\leftharpoonup": "↼",
+    r"\leftharpoondown": "↽",
+    r"\nrightarrow": "↛",
+    r"\nleftarrow": "↚",
+    r"\nleftrightarrow": "↮",
+    r"\nRightarrow": "⇏",
+    r"\nLeftarrow": "⇍",
+    r"\nLeftrightarrow": "⇎",
+    # Comparison & Relations
+    r"\leqslant": "≤",
+    r"\geqslant": "≥",
+    r"\leq": "≤",
+    r"\geq": "≥",
+    r"\le": "≤",
+    r"\ge": "≥",
+    r"\neq": "≠",
+    r"\ne": "≠",
+    r"\thickapprox": "≈",
+    r"\approx": "≈",
+    r"\thicksim": "∼",
+    r"\sim": "∼",
+    r"\simeq": "≃",
+    r"\cong": "≅",
+    r"\equiv": "≡",
+    r"\nequiv": "≢",
+    r"\ll": "≪",
+    r"\gg": "≫",
+    r"\propto": "∝",
+    r"\asymp": "≍",
+    r"\doteq": "≐",
+    r"\parallel": "∥",
+    r"\nparallel": "∦",
+    r"\perp": "⊥",
+    r"\mid": "∣",
+    r"\nmid": "∤",
+    # Arithmetic & Binary Operators
+    r"\pm": "±",
+    r"\mp": "∓",
+    r"\times": "×",
+    r"\div": "÷",
+    r"\cdot": "·",
+    r"\centerdot": "·",
+    r"\bullet": "•",
+    r"\circ": "∘",
+    r"\ast": "∗",
+    r"\star": "⋆",
+    r"\oplus": "⊕",
+    r"\ominus": "⊖",
+    r"\otimes": "⊗",
+    r"\oslash": "⊘",
+    r"\odot": "⊙",
+    r"\dagger": "†",
+    r"\ddagger": "‡",
+    r"\amalg": "⨿",
+    r"\wr": "≀",
+    # Set Theory & Logic
+    r"\in": "∈",
+    r"\notin": "∉",
+    r"\ni": "∋",
+    r"\owns": "∋",
+    r"\subseteq": "⊆",
+    r"\supseteq": "⊇",
+    r"\nsubseteq": "⊈",
+    r"\nsupseteq": "⊉",
+    r"\subsetneq": "⊊",
+    r"\supsetneq": "⊋",
+    r"\subset": "⊂",
+    r"\supset": "⊃",
+    r"\cup": "∪",
+    r"\cap": "∩",
+    r"\setminus": "∖",
+    r"\emptyset": "∅",
+    r"\varnothing": "∅",
+    r"\forall": "∀",
+    r"\exists": "∃",
+    r"\nexists": "∄",
+    r"\neg": "¬",
+    r"\lnot": "¬",
+    r"\land": "∧",
+    r"\wedge": "∧",
+    r"\lor": "∨",
+    r"\vee": "∨",
+    r"\veebar": "⊻",
+    r"\vdash": "⊢",
+    r"\dashv": "⊣",
+    r"\models": "⊨",
+    r"\top": "⊤",
+    r"\bot": "⊥",
+    r"\therefore": "∴",
+    r"\because": "∵",
+    # Calculus, Analysis, Geometry & Misc
+    r"\infty": "∞",
+    r"\partial": "∂",
+    r"\nabla": "∇",
+    r"\sum": "∑",
+    r"\prod": "∏",
+    r"\coprod": "∐",
+    r"\iiint": "∭",
+    r"\iint": "∬",
+    r"\oint": "∮",
+    r"\int": "∫",
+    r"\sqrt": "√",
+    r"\degree": "°",
+    r"\prime": "′",
+    r"\ldots": "…",
+    r"\dots": "…",
+    r"\cdots": "⋯",
+    r"\vdots": "⋮",
+    r"\ddots": "⋱",
+    r"\checkmark": "✓",
+    r"\checked": "✓",
+    r"\xmark": "✗",
+    r"\measuredangle": "∡",
+    r"\angle": "∠",
+    r"\bigtriangleup": "△",
+    r"\triangle": "△",
+    r"\blacktriangle": "▲",
+    r"\square": "□",
+    r"\Box": "□",
+    r"\blacksquare": "■",
+    r"\diamond": "◇",
+    r"\Diamond": "◇",
+    r"\blacklozenge": "⧫",
+    r"\ell": "ℓ",
+    r"\hbar": "ℏ",
+    r"\Re": "ℜ",
+    r"\Im": "ℑ",
+    r"\aleph": "ℵ",
+    r"\wp": "℘",
+    r"\mho": "℧",
+    r"\AA": "Å",
+    r"\S": "§",
+    r"\P": "¶",
+    r"\copyright": "©",
+    r"\registered": "®",
+    r"\trademark": "™",
+    r"\euro": "€",
+    r"\pounds": "£",
+    r"\yen": "¥",
+    r"\permil": "‰",
+    # Greek Letters (lowercase & uppercase)
+    r"\varepsilon": "ε",
+    r"\vartheta": "ϑ",
+    r"\varpi": "ϖ",
+    r"\varrho": "ϱ",
+    r"\varsigma": "ς",
+    r"\varphi": "φ",
+    r"\alpha": "α",
+    r"\beta": "β",
+    r"\gamma": "γ",
+    r"\delta": "δ",
+    r"\epsilon": "ϵ",
+    r"\zeta": "ζ",
+    r"\eta": "η",
+    r"\theta": "θ",
+    r"\iota": "ι",
+    r"\kappa": "κ",
+    r"\lambda": "λ",
+    r"\mu": "μ",
+    r"\nu": "ν",
+    r"\xi": "ξ",
+    r"\pi": "π",
+    r"\rho": "ρ",
+    r"\sigma": "σ",
+    r"\tau": "τ",
+    r"\upsilon": "υ",
+    r"\phi": "ϕ",
+    r"\chi": "χ",
+    r"\psi": "ψ",
+    r"\omega": "ω",
+    r"\Gamma": "Γ",
+    r"\Delta": "Δ",
+    r"\Theta": "Θ",
+    r"\Lambda": "Λ",
+    r"\Xi": "Ξ",
+    r"\Pi": "Π",
+    r"\Sigma": "Σ",
+    r"\Upsilon": "Υ",
+    r"\Phi": "Φ",
+    r"\Psi": "Ψ",
+    r"\Omega": "Ω",
+    # Math spacing escapes
+    r"\qquad": "\u2003\u2003",
+    r"\quad": "\u2003",
+    r"\,": "\u2009",
+    r"\;": " ",
+    r"\:": " ",
+    r"\!": "",
+}
+
+BLACKBOARD_BOLD_MAP: dict[str, str] = {
+    "R": "ℝ",
+    "N": "ℕ",
+    "Z": "ℤ",
+    "Q": "ℚ",
+    "C": "ℂ",
+    "P": "ℙ",
+    "E": "𝔼",
+    "F": "𝔽",
+    "H": "ℍ",
+}
+
+VULGAR_FRACTIONS: dict[tuple[str, str], str] = {
+    ("1", "2"): "½",
+    ("1", "3"): "⅓",
+    ("2", "3"): "⅔",
+    ("1", "4"): "¼",
+    ("3", "4"): "¾",
+    ("1", "5"): "⅕",
+    ("2", "5"): "⅖",
+    ("3", "5"): "⅗",
+    ("4", "5"): "⅘",
+    ("1", "6"): "⅙",
+    ("5", "6"): "⅚",
+    ("1", "8"): "⅛",
+    ("3", "8"): "⅜",
+    ("5", "8"): "⅝",
+    ("7", "8"): "⅞",
+}
+
+SUPERSCRIPT_MAP: dict[str, str] = str.maketrans("0123456789+-=()ni", "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ")
+SUPERSCRIPT_CHARS = set("0123456789+-=()ni")
+
+SUBSCRIPT_MAP: dict[str, str] = str.maketrans(
+    "0123456789+-=()aehijklmnoprstuvx",
+    "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ",
+)
+SUBSCRIPT_CHARS = set("0123456789+-=()aehijklmnoprstuvx")
+
+CUSTOM_HTML_ENTITIES: dict[str, str] = {
+    "&rightarrow;": "→",
+    "&leftarrow;": "←",
+    "&leftrightarrow;": "↔",
+    "&Rightarrow;": "⇒",
+    "&Leftarrow;": "⇐",
+    "&Leftrightarrow;": "⇔",
+    "&longleftrightarrow;": "⟷",
+    "&longrightarrow;": "→",
+    "&longleftarrow;": "←",
+}
+
+EMOJI_SHORTCODES: dict[str, str] = {
+    ":arrow_right:": "→",
+    ":arrow_left:": "←",
+    ":arrow_up:": "↑",
+    ":arrow_down:": "↓",
+    ":arrow_upper_right:": "↗",
+    ":arrow_lower_right:": "↘",
+    ":arrow_lower_left:": "↙",
+    ":arrow_upper_left:": "↖",
+    ":left_right_arrow:": "↔",
+    ":arrow_up_down:": "↕",
+    ":arrows_counterclockwise:": "🔄",
+    ":point_right:": "👉",
+    ":point_left:": "👈",
+    ":white_check_mark:": "✅",
+    ":heavy_check_mark:": "✔",
+    ":ballot_box_with_check:": "☑",
+    ":x:": "❌",
+    ":cross_mark:": "❌",
+    ":heavy_multiplication_x:": "✖",
+    ":warning:": "⚠",
+    ":exclamation:": "❗",
+    ":heavy_exclamation_mark:": "❗",
+    ":question:": "❓",
+    ":bulb:": "💡",
+    ":memo:": "📝",
+    ":pencil:": "📝",
+    ":pushpin:": "📌",
+    ":round_pushpin:": "📍",
+    ":bookmark:": "🔖",
+    ":link:": "🔗",
+    ":lock:": "🔒",
+    ":unlock:": "🔓",
+    ":key:": "🔑",
+    ":mag:": "🔍",
+    ":gear:": "⚙",
+    ":wrench:": "🔧",
+    ":hammer:": "🔨",
+    ":rocket:": "🚀",
+    ":fire:": "🔥",
+    ":sparkles:": "✨",
+    ":star:": "⭐",
+    ":zap:": "⚡",
+    ":bug:": "🐛",
+    ":chart_with_upwards_trend:": "📈",
+    ":chart_with_downwards_trend:": "📉",
+    ":bar_chart:": "📊",
+    ":clipboard:": "📋",
+    ":file_folder:": "📁",
+    ":page_facing_up:": "📄",
+    ":calendar:": "📅",
+    ":hourglass:": "⏳",
+    ":thumbsup:": "👍",
+    ":+1:": "👍",
+    ":thumbsdown:": "👎",
+    ":-1:": "👎",
+    ":information_source:": "ℹ",
+    ":info:": "ℹ",
+    ":stop_sign:": "🛑",
+    ":no_entry:": "⛔",
+    ":construction:": "🚧",
+    ":trophy:": "🏆",
+    ":dart:": "🎯",
+}
+
+# Precompiled regexes for LaTeX command matching (longest-first)
+_ALPHA_LATEX_KEYS = sorted((k for k in LATEX_SYMBOLS if k[1:].isalpha()), key=len, reverse=True)
+_NONALPHA_LATEX_KEYS = sorted((k for k in LATEX_SYMBOLS if not k[1:].isalpha()), key=len, reverse=True)
+
+_RE_ALPHA_LATEX = re.compile(
+    r"(?:" + "|".join(re.escape(k) for k in _ALPHA_LATEX_KEYS) + r")(?![a-zA-Z])(?:\{\s*\})?"
+)
+_RE_ALL_LATEX = re.compile(
+    r"(?:" + "|".join(re.escape(k) for k in _ALPHA_LATEX_KEYS) + r")(?![a-zA-Z])(?:\{\s*\})?"
+    + r"|(?:" + "|".join(re.escape(k) for k in _NONALPHA_LATEX_KEYS) + r")"
+)
+_RE_EMOJI_SHORTCODE = re.compile(
+    "|".join(re.escape(k) for k in sorted(EMOJI_SHORTCODES, key=len, reverse=True))
+)
+_RE_XML_ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff\u200b\ufeff]")
+_RE_URL = re.compile(r"(?:https?|ftp|mailto):[^\s<>()]+")
+
+_ASCII_ARROW_MAP: dict[str, str] = {
+    "<-->": "⟷",
+    "<==>": "⟺",
+    "<->": "↔",
+    "<=>": "⇔",
+    "-->": "→",
+    "<--": "←",
+    "==>": "⇒",
+    "<==": "⇐",
+    "->": "→",
+    "<-": "←",
+}
+_RE_ASCII_ARROWS = re.compile(
+    "|".join(re.escape(k) for k in sorted(_ASCII_ARROW_MAP, key=len, reverse=True))
+)
+
+
+def sanitize_xml_text(text: str) -> str:
+    """Remove XML-illegal control characters and invisible zero-width markers."""
+    if not text:
+        return text
+    return _RE_XML_ILLEGAL.sub("", text)
+
+
+def _is_symbol_font_char(ch: str) -> bool:
+    """Return True if character belongs to Unicode symbol blocks needing Segoe UI Symbol fallback."""
+    cp = ord(ch)
+    return (
+        0x2100 <= cp <= 0x21FF
+        or 0x2200 <= cp <= 0x22FF
+        or 0x2300 <= cp <= 0x23FF
+        or 0x25A0 <= cp <= 0x25FF
+        or 0x2600 <= cp <= 0x26FF
+        or 0x2700 <= cp <= 0x27FF
+        or 0x2900 <= cp <= 0x297F
+        or 0x2A00 <= cp <= 0x2AFF
+        or 0x2B00 <= cp <= 0x2BFF
+    )
+
+
+def _split_symbol_segments(text: str) -> list[tuple[str, bool]]:
+    """Split text into contiguous runs of (segment_text, needs_symbol_font)."""
+    if not text:
+        return []
+    segments: list[tuple[str, bool]] = []
+    buf: list[str] = []
+    cur_flag = _is_symbol_font_char(text[0])
+    for ch in text:
+        flag = _is_symbol_font_char(ch)
+        if flag != cur_flag:
+            segments.append(("".join(buf), cur_flag))
+            buf = [ch]
+            cur_flag = flag
+        else:
+            buf.append(ch)
+    if buf:
+        segments.append(("".join(buf), cur_flag))
+    return segments
+
+
+def _mask_code_regions(md_text: str) -> tuple[str, list[str]]:
+    """Mask fenced code blocks and inline code spans so preprocessing leaves code untouched."""
+    masked: list[str] = []
+    out: list[str] = []
+    i = 0
+    n = len(md_text)
+
+    def store(chunk: str) -> str:
+        idx = len(masked)
+        masked.append(chunk)
+        return f"\x00MD_CODE_{idx}\x00"
+
+    fence_re = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})[^\n]*(?:\n|$)", re.MULTILINE)
+
+    while i < n:
+        # Check fenced code block at line start
+        if i == 0 or md_text[i - 1] == "\n":
+            fm = fence_re.match(md_text, i)
+            if fm:
+                fence_char = fm.group(1)[0]
+                fence_len = len(fm.group(1))
+                close_re = re.compile(
+                    rf"^[ \t]{{0,3}}{re.escape(fence_char)}{{{fence_len},}}[ \t]*(?:\n|$)",
+                    re.MULTILINE,
+                )
+                cm = close_re.search(md_text, fm.end())
+                end_pos = cm.end() if cm else n
+                out.append(store(md_text[i:end_pos]))
+                i = end_pos
+                continue
+
+        # Check inline code span
+        if md_text[i] == "`":
+            tick_end = i
+            while tick_end < n and md_text[tick_end] == "`":
+                tick_end += 1
+            tick_str = md_text[i:tick_end]
+            # Find matching closing backtick run of exact length without crossing blank lines
+            search_pos = tick_end
+            close_pos = -1
+            while search_pos < n:
+                nxt = md_text.find(tick_str, search_pos)
+                if nxt == -1:
+                    break
+                # Ensure exact backtick count
+                after = nxt + len(tick_str)
+                if (nxt == 0 or md_text[nxt - 1] != "`") and (after == n or md_text[after] != "`"):
+                    if "\n\n" not in md_text[tick_end:nxt]:
+                        close_pos = after
+                    break
+                search_pos = nxt + 1
+            if close_pos != -1:
+                out.append(store(md_text[i:close_pos]))
+                i = close_pos
+                continue
+            out.append(tick_str)
+            i = tick_end
+            continue
+
+        out.append(md_text[i])
+        i += 1
+
+    return "".join(out), masked
+
+
+def _unmask_regions(text: str, items: list[str], prefix: str) -> str:
+    """Restore masked segments by placeholder index."""
+    if not items:
+        return text
+    pattern = re.compile(rf"\x00{re.escape(prefix)}_(\d+)\x00")
+    return pattern.sub(lambda m: items[int(m.group(1))], text)
+
+
+def _looks_like_math(inner: str) -> bool:
+    """Heuristic distinguishing $...$ inline LaTeX math from prose currency like $100 ... $200."""
+    stripped = inner.strip()
+    if not stripped:
+        return False
+    if re.fullmatch(r"[\d.,\s]+", stripped):
+        return False
+    if any(ch in stripped for ch in ("\\", "^", "_", "=", "<", ">", "{", "}")):
+        return True
+    if any(ch.isspace() for ch in stripped):
+        return bool(re.search(r"[+\-*/]", stripped))
+    return len(stripped) <= 20 and bool(re.search(r"[A-Za-z]", stripped))
+
+
+def convert_latex_expression(expr: str) -> str:
+    """Convert a LaTeX math expression into clean Unicode text and inline sub/sup markup."""
+    s = expr.strip()
+
+    # Composite negations
+    s = s.replace(r"\not\equiv", "≢").replace(r"\not\in", "∉").replace(r"\not\subset", "⊄").replace(r"\not=", "≠")
+
+    # Blackboard bold \mathbb{R} -> ℝ
+    s = re.sub(r"\\mathbb\{([A-Za-z])\}", lambda m: BLACKBOARD_BOLD_MAP.get(m.group(1), m.group(1)), s)
+
+    # Unwrap \text{...}, \textbf{...}, \mathrm{...}, etc.
+    for _ in range(3):
+        s_next = re.sub(
+            r"\\(?:text|textbf|textit|textrm|mathrm|mathbf|mathit|mathsf|mathtt|operatorname)\{([^{}]*)\}",
+            r"\1",
+            s,
+        )
+        if s_next == s:
+            break
+        s = s_next
+
+    # Strip delimiter sizing commands (must not match \leftarrow, \rightarrow, etc.)
+    s = re.sub(r"\\(?:left|right|bigl|bigr|Bigl|Bigr|big|Big)(?![a-zA-Z])\s*([\\.|()\[\]{}|])?", lambda m: (
+        "{" if m.group(1) == r"\{" else
+        "}" if m.group(1) == r"\}" else
+        "‖" if m.group(1) == r"\|" else
+        "" if m.group(1) in (".", None) else m.group(1)
+    ), s)
+
+    # Roots
+    s = re.sub(r"\\sqrt\[3\]\{([^{}]+)\}", lambda m: f"∛{m.group(1)}" if len(m.group(1)) <= 2 else f"∛({m.group(1)})", s)
+    s = re.sub(r"\\sqrt\[4\]\{([^{}]+)\}", lambda m: f"∜{m.group(1)}" if len(m.group(1)) <= 2 else f"∜({m.group(1)})", s)
+    s = re.sub(r"\\sqrt\{([^{}]+)\}", lambda m: f"√{m.group(1)}" if len(m.group(1)) <= 2 else f"√({m.group(1)})", s)
+
+    # Fractions (up to 2 nesting levels)
+    def _replace_frac(match: re.Match) -> str:
+        num = match.group(1).strip()
+        den = match.group(2).strip()
+        if (num, den) in VULGAR_FRACTIONS:
+            return VULGAR_FRACTIONS[(num, den)]
+        simple_re = r"^[A-Za-z0-9α-ωΑ-Ω]+$"
+        if re.match(simple_re, num) and re.match(simple_re, den):
+            return f"{num}/{den}"
+        return f"({num})/({den})"
+
+    for _ in range(2):
+        s_next = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", _replace_frac, s)
+        if s_next == s:
+            break
+        s = s_next
+
+    # Degree marker
+    s = re.sub(r"\^\{\s*\\circ\s*\}|\^\\circ(?![a-zA-Z])", "°", s)
+
+    # Known LaTeX symbol commands
+    s = _RE_ALL_LATEX.sub(lambda m: LATEX_SYMBOLS.get(m.group(0).rstrip("{}"), LATEX_SYMBOLS.get(m.group(0), m.group(0))), s)
+
+    # Superscripts and subscripts
+    def _format_sup(content: str) -> str:
+        if content and all(ch in SUPERSCRIPT_CHARS for ch in content):
+            return content.translate(SUPERSCRIPT_MAP)
+        return f"<sup>{content}</sup>"
+
+    def _format_sub(content: str) -> str:
+        if content and all(ch in SUBSCRIPT_CHARS for ch in content):
+            return content.translate(SUBSCRIPT_MAP)
+        return f"<sub>{content}</sub>"
+
+    s = re.sub(r"\^\{([^{}]+)\}", lambda m: _format_sup(m.group(1).strip()), s)
+    s = re.sub(r"\^([A-Za-z0-9])", lambda m: _format_sup(m.group(1)), s)
+    s = re.sub(r"_\{([^{}]+)\}", lambda m: _format_sub(m.group(1).strip()), s)
+    s = re.sub(r"_([A-Za-z0-9])", lambda m: _format_sub(m.group(1)), s)
+
+    # Unescape LaTeX punctuation escapes
+    for esc, plain in ((r"\%", "%"), (r"\$", "$"), (r"\_", "_"), (r"\{", "{"), (r"\}", "}"), (r"\#", "#"), (r"\&", "&")):
+        s = s.replace(esc, plain)
+
+    return re.sub(r" {2,}", " ", s).strip()
+
+
+def preprocess_markdown_special_constructs(md_text: str) -> str:
+    """Normalize LaTeX/math spans and standalone LaTeX commands before MarkdownIt parsing."""
+    protected_text, masked_code = _mask_code_regions(md_text)
+
+    # 1. Display math $$ ... $$ and \[ ... \]
+    protected_text = re.sub(
+        r"\$\$([\s\S]+?)\$\$",
+        lambda m: convert_latex_expression(m.group(1)),
+        protected_text,
+    )
+    protected_text = re.sub(
+        r"\\\[([\s\S]+?)\\\]",
+        lambda m: convert_latex_expression(m.group(1)),
+        protected_text,
+    )
+
+    # 2. Inline math \( ... \) and $ ... $
+    protected_text = re.sub(
+        r"\\\(([\s\S]+?)\\\)",
+        lambda m: convert_latex_expression(m.group(1)),
+        protected_text,
+    )
+    protected_text = re.sub(
+        r"(?<!\\)\$(?!\s)([^\n$]+?)(?<!\s)(?<!\\)\$",
+        lambda m: convert_latex_expression(m.group(1)) if _looks_like_math(m.group(1)) else m.group(0),
+        protected_text,
+    )
+
+    # 3. Standalone alphabetic LaTeX commands outside math delimiters (e.g. bare \rightarrow)
+    protected_text = _RE_ALPHA_LATEX.sub(
+        lambda m: LATEX_SYMBOLS.get(m.group(0).rstrip("{}"), LATEX_SYMBOLS.get(m.group(0), m.group(0))),
+        protected_text,
+    )
+
+    return _unmask_regions(protected_text, masked_code, "MD_CODE")
+
+
+def normalize_inline_text(text: str) -> str:
+    """Normalize HTML entities, emoji shortcodes, ASCII arrows, and typography in prose text."""
+    if not text:
+        return text
+
+    # Mask URLs so arrows/dashes inside plain-text URLs stay intact
+    urls: list[str] = []
+
+    def _store_url(m: re.Match) -> str:
+        idx = len(urls)
+        urls.append(m.group(0))
+        return f"\x00MD_URL_{idx}\x00"
+
+    s = _RE_URL.sub(_store_url, text)
+
+    # 1. Custom & standard HTML entities
+    for ent, ch in CUSTOM_HTML_ENTITIES.items():
+        if ent in s:
+            s = s.replace(ent, ch)
+    if "&" in s:
+        s = html.unescape(s)
+
+    # 2. Residual standalone LaTeX commands
+    if "\\" in s:
+        s = _RE_ALPHA_LATEX.sub(
+            lambda m: LATEX_SYMBOLS.get(m.group(0).rstrip("{}"), LATEX_SYMBOLS.get(m.group(0), m.group(0))),
+            s,
+        )
+
+    # 3. Emoji shortcodes
+    if ":" in s:
+        s = _RE_EMOJI_SHORTCODE.sub(lambda m: EMOJI_SHORTCODES[m.group(0)], s)
+
+    # 4. ASCII arrows & typographic shorthands
+    s = _RE_ASCII_ARROWS.sub(lambda m: _ASCII_ARROW_MAP[m.group(0)], s)
+    s = re.sub(r"(?<=\s)=>(?=\s)", "⇒", s)
+    s = re.sub(r"(?<!\w)\+/-(?!\w)|(?<=\s)\+-(?=\s|\d)", "±", s)
+    s = re.sub(r"(?<=\s)!=(?=\s)", "≠", s)
+    s = re.sub(r"(?<=\s)<=(?=\s)", "≤", s)
+    s = re.sub(r"(?<=\s)>=(?=\s)", "≥", s)
+    s = re.sub(r"(?<=\s)~=(?=\s)", "≈", s)
+    s = s.replace("...", "…")
+    s = s.replace("---", "—")
+    s = re.sub(r"(?<=\s)--(?=\s)", "–", s)
+    s = re.sub(r"\([cC]\)", "©", s)
+    s = re.sub(r"\([rR]\)", "®", s)
+    s = re.sub(r"\([tT][mM]\)", "™", s)
+
+    s = _unmask_regions(s, urls, "MD_URL")
+    return sanitize_xml_text(s)
+
+
+def _apply_rfonts(rPr, font_name: str):
+    """Set w:rFonts across all OpenXML font slots on an rPr element."""
+    rFonts = rPr.find(qn("w:rFonts"))
+    if rFonts is None:
+        rFonts = OxmlElement("w:rFonts")
+        rPr.insert(0, rFonts)
+    for slot in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
+        rFonts.set(qn(slot), font_name)
+
+
+def add_styled_run(
+    paragraph,
+    text: str,
+    *,
+    bold: bool = False,
+    italic: bool = False,
+    strike: bool = False,
+    code: bool = False,
+    subscript: bool = False,
+    superscript: bool = False,
+    underline: bool = False,
+    highlight: bool = False,
+    hyperlink_el=None,
+):
+    """Add text runs with stacked formatting, XML sanitization, and symbol font fallback."""
+    clean_text = sanitize_xml_text(text)
+    if not clean_text:
+        return
+
+    for seg_text, is_symbol in _split_symbol_segments(clean_text):
+        if hyperlink_el is not None:
+            r = OxmlElement("w:r")
+            rPr = OxmlElement("w:rPr")
+            if bold:
+                rPr.append(OxmlElement("w:b"))
+            if italic:
+                rPr.append(OxmlElement("w:i"))
+            if strike:
+                rPr.append(OxmlElement("w:strike"))
+            if is_symbol:
+                _apply_rfonts(rPr, "Segoe UI Symbol")
+            elif code:
+                _apply_rfonts(rPr, "Consolas")
+            if code:
+                sz = OxmlElement("w:sz")
+                sz.set(qn("w:val"), "19")
+                rPr.append(sz)
+                c = OxmlElement("w:color")
+                c.set(qn("w:val"), "C7254E")
+                rPr.append(c)
+            else:
+                c = OxmlElement("w:color")
+                c.set(qn("w:val"), "0563C1")
+                rPr.append(c)
+                u = OxmlElement("w:u")
+                u.set(qn("w:val"), "single")
+                rPr.append(u)
+            if subscript or superscript:
+                va = OxmlElement("w:vertAlign")
+                va.set(qn("w:val"), "subscript" if subscript else "superscript")
+                rPr.append(va)
+            if highlight:
+                hl = OxmlElement("w:highlight")
+                hl.set(qn("w:val"), "yellow")
+                rPr.append(hl)
+
+            r.append(rPr)
+            t = OxmlElement("w:t")
+            t.text = seg_text
+            if seg_text.startswith(" ") or seg_text.endswith(" "):
+                t.set(qn("xml:space"), "preserve")
+            r.append(t)
+            hyperlink_el.append(r)
+        else:
+            run = paragraph.add_run(seg_text)
+            run.bold = bold
+            run.italic = italic
+            run.font.strike = strike
+            if underline:
+                run.underline = True
+            if subscript:
+                run.font.subscript = True
+            elif superscript:
+                run.font.superscript = True
+            if highlight:
+                run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+            if is_symbol:
+                run.font.name = "Segoe UI Symbol"
+                _apply_rfonts(run._r.get_or_add_rPr(), "Segoe UI Symbol")
+                if code:
+                    run.font.size = Pt(9.5)
+                    run.font.color.rgb = RGBColor(199, 37, 78)
+            elif code:
+                run.font.name = "Consolas"
+                run.font.size = Pt(9.5)
+                run.font.color.rgb = RGBColor(199, 37, 78)
 
 
 def add_image_smart(doc: Document, paragraph, img_path: Path, max_w_in: float = 5.8, max_h_in: float = 7.5):
@@ -106,140 +889,128 @@ def render_inline_tree(
     italic: bool = False,
     strike: bool = False,
     code: bool = False,
+    subscript: bool = False,
+    superscript: bool = False,
+    underline: bool = False,
+    highlight: bool = False,
     hyperlink_el=None,
 ):
-    """Recursively render inline Markdown AST nodes with full stacked formatting (bold, italic, strike, code, links)."""
+    """Recursively render inline Markdown AST nodes with stacked formatting, inline HTML, and special symbols."""
+    cur_bold = bold
+    cur_italic = italic
+    cur_strike = strike
+    cur_code = code
+    cur_sub = subscript
+    cur_sup = superscript
+    cur_underline = underline
+    cur_highlight = highlight
+
     for node in nodes:
         node_type, content, children, attrs = get_node_info(node)
 
         if node_type == "text":
-            text = content
+            text = content if cur_code else normalize_inline_text(content)
             if not text:
                 continue
-
-            if hyperlink_el is not None:
-                r = OxmlElement("w:r")
-                rPr = OxmlElement("w:rPr")
-                if bold:
-                    rPr.append(OxmlElement("w:b"))
-                if italic:
-                    rPr.append(OxmlElement("w:i"))
-                if strike:
-                    rPr.append(OxmlElement("w:strike"))
-                if code:
-                    rFonts = OxmlElement("w:rFonts")
-                    rFonts.set(qn("w:ascii"), "Consolas")
-                    rFonts.set(qn("w:hAnsi"), "Consolas")
-                    rPr.append(rFonts)
-                    sz = OxmlElement("w:sz")
-                    sz.set(qn("w:val"), "19")
-                    rPr.append(sz)
-
-                # Default link colors and single underline
-                c = OxmlElement("w:color")
-                c.set(qn("w:val"), "0563C1")
-                rPr.append(c)
-                u = OxmlElement("w:u")
-                u.set(qn("w:val"), "single")
-                rPr.append(u)
-
-                r.append(rPr)
-                t = OxmlElement("w:t")
-                t.text = text
-                if text.startswith(" ") or text.endswith(" "):
-                    t.set(qn("xml:space"), "preserve")
-                r.append(t)
-                hyperlink_el.append(r)
-            else:
-                run = paragraph.add_run(text)
-                run.bold = bold
-                run.italic = italic
-                run.font.strike = strike
-                if code:
-                    run.font.name = "Consolas"
-                    run.font.size = Pt(9.5)
-                    run.font.color.rgb = RGBColor(199, 37, 78)
+            add_styled_run(
+                paragraph,
+                text,
+                bold=cur_bold,
+                italic=cur_italic,
+                strike=cur_strike,
+                code=cur_code,
+                subscript=cur_sub,
+                superscript=cur_sup,
+                underline=cur_underline,
+                highlight=cur_highlight,
+                hyperlink_el=hyperlink_el,
+            )
 
         elif node_type == "code_inline":
-            if hyperlink_el is not None:
-                r = OxmlElement("w:r")
-                rPr = OxmlElement("w:rPr")
-                if bold:
-                    rPr.append(OxmlElement("w:b"))
-                if italic:
-                    rPr.append(OxmlElement("w:i"))
-                rFonts = OxmlElement("w:rFonts")
-                rFonts.set(qn("w:ascii"), "Consolas")
-                rFonts.set(qn("w:hAnsi"), "Consolas")
-                rPr.append(rFonts)
-                sz = OxmlElement("w:sz")
-                sz.set(qn("w:val"), "19")
-                rPr.append(sz)
-                c = OxmlElement("w:color")
-                c.set(qn("w:val"), "C7254E")
-                rPr.append(c)
-                r.append(rPr)
-                t = OxmlElement("w:t")
-                t.text = content
-                if content.startswith(" ") or content.endswith(" "):
-                    t.set(qn("xml:space"), "preserve")
-                r.append(t)
-                hyperlink_el.append(r)
-            else:
-                run = paragraph.add_run(content)
-                run.bold = bold
-                run.italic = italic
-                run.font.strike = strike
-                run.font.name = "Consolas"
-                run.font.size = Pt(9.5)
-                run.font.color.rgb = RGBColor(199, 37, 78)
+            if not content:
+                continue
+            add_styled_run(
+                paragraph,
+                content,
+                bold=cur_bold,
+                italic=cur_italic,
+                strike=cur_strike,
+                code=True,
+                subscript=cur_sub,
+                superscript=cur_sup,
+                underline=cur_underline,
+                highlight=cur_highlight,
+                hyperlink_el=hyperlink_el,
+            )
+
+        elif node_type == "html_inline":
+            raw_tag = content.strip().lower()
+            if raw_tag.startswith("<!--"):
+                continue
+            tag_match = re.match(r"^<(/?)([a-z0-9]+)(?:\s[^>]*)?/?>$", raw_tag)
+            if not tag_match:
+                continue
+            is_closing = bool(tag_match.group(1))
+            tag_name = tag_match.group(2)
+
+            if tag_name == "br" and not is_closing:
+                if hyperlink_el is not None:
+                    r = OxmlElement("w:r")
+                    r.append(OxmlElement("w:br"))
+                    hyperlink_el.append(r)
+                else:
+                    paragraph.add_run().add_break()
+            elif tag_name == "sub":
+                cur_sub = not is_closing
+            elif tag_name == "sup":
+                cur_sup = not is_closing
+            elif tag_name in ("u", "ins"):
+                cur_underline = not is_closing
+            elif tag_name in ("s", "del", "strike"):
+                cur_strike = not is_closing
+            elif tag_name in ("b", "strong"):
+                cur_bold = not is_closing
+            elif tag_name in ("i", "em"):
+                cur_italic = not is_closing
+            elif tag_name in ("code", "kbd", "samp"):
+                cur_code = not is_closing
+            elif tag_name == "mark":
+                cur_highlight = not is_closing
 
         elif node_type == "strong":
-            if children:
-                render_inline_tree(paragraph, children, base_dir, doc, bold=True, italic=italic, strike=strike, code=code, hyperlink_el=hyperlink_el)
-            elif content:
+            sub_nodes = children if children else (
+                [{"type": "text", "content": content, "children": [], "attrs": {}}] if content else []
+            )
+            if sub_nodes:
                 render_inline_tree(
-                    paragraph,
-                    [{"type": "text", "content": content, "children": [], "attrs": {}}],
-                    base_dir,
-                    doc,
-                    bold=True,
-                    italic=italic,
-                    strike=strike,
-                    code=code,
-                    hyperlink_el=hyperlink_el,
+                    paragraph, sub_nodes, base_dir, doc,
+                    bold=True, italic=cur_italic, strike=cur_strike, code=cur_code,
+                    subscript=cur_sub, superscript=cur_sup, underline=cur_underline,
+                    highlight=cur_highlight, hyperlink_el=hyperlink_el,
                 )
 
         elif node_type == "em":
-            if children:
-                render_inline_tree(paragraph, children, base_dir, doc, bold=bold, italic=True, strike=strike, code=code, hyperlink_el=hyperlink_el)
-            elif content:
+            sub_nodes = children if children else (
+                [{"type": "text", "content": content, "children": [], "attrs": {}}] if content else []
+            )
+            if sub_nodes:
                 render_inline_tree(
-                    paragraph,
-                    [{"type": "text", "content": content, "children": [], "attrs": {}}],
-                    base_dir,
-                    doc,
-                    bold=bold,
-                    italic=True,
-                    strike=strike,
-                    code=code,
-                    hyperlink_el=hyperlink_el,
+                    paragraph, sub_nodes, base_dir, doc,
+                    bold=cur_bold, italic=True, strike=cur_strike, code=cur_code,
+                    subscript=cur_sub, superscript=cur_sup, underline=cur_underline,
+                    highlight=cur_highlight, hyperlink_el=hyperlink_el,
                 )
 
         elif node_type == "s":
-            if children:
-                render_inline_tree(paragraph, children, base_dir, doc, bold=bold, italic=italic, strike=True, code=code, hyperlink_el=hyperlink_el)
-            elif content:
+            sub_nodes = children if children else (
+                [{"type": "text", "content": content, "children": [], "attrs": {}}] if content else []
+            )
+            if sub_nodes:
                 render_inline_tree(
-                    paragraph,
-                    [{"type": "text", "content": content, "children": [], "attrs": {}}],
-                    base_dir,
-                    doc,
-                    bold=bold,
-                    italic=italic,
-                    strike=True,
-                    code=code,
-                    hyperlink_el=hyperlink_el,
+                    paragraph, sub_nodes, base_dir, doc,
+                    bold=cur_bold, italic=cur_italic, strike=True, code=cur_code,
+                    subscript=cur_sub, superscript=cur_sup, underline=cur_underline,
+                    highlight=cur_highlight, hyperlink_el=hyperlink_el,
                 )
 
         elif node_type == "softbreak":
@@ -275,31 +1046,23 @@ def render_inline_tree(
                         children,
                         base_dir,
                         doc,
-                        bold=bold,
-                        italic=italic,
-                        strike=strike,
-                        code=code,
+                        bold=cur_bold,
+                        italic=cur_italic,
+                        strike=cur_strike,
+                        code=cur_code,
+                        subscript=cur_sub,
+                        superscript=cur_sup,
+                        underline=cur_underline,
+                        highlight=cur_highlight,
                         hyperlink_el=hyperlink_obj,
                     )
                 else:
-                    r = OxmlElement("w:r")
-                    rPr = OxmlElement("w:rPr")
-                    c = OxmlElement("w:color")
-                    c.set(qn("w:val"), "0563C1")
-                    rPr.append(c)
-                    u = OxmlElement("w:u")
-                    u.set(qn("w:val"), "single")
-                    rPr.append(u)
-                    r.append(rPr)
-                    t = OxmlElement("w:t")
-                    t.text = href
-                    r.append(t)
-                    hyperlink_obj.append(r)
+                    add_styled_run(paragraph, href, hyperlink_el=hyperlink_obj)
 
                 paragraph._p.append(hyperlink_obj)
             except Exception:
-                link_text = extract_plain_text(node) or href
-                run = paragraph.add_run(f"{link_text} ({href})")
+                link_text = normalize_inline_text(extract_plain_text(node)) or href
+                run = paragraph.add_run(sanitize_xml_text(f"{link_text} ({href})"))
                 run.underline = True
                 run.font.color.rgb = RGBColor(5, 99, 193)
 
@@ -310,18 +1073,36 @@ def render_inline_tree(
 
         elif node_type in ("paragraph", "inline", "list_item"):
             if children:
-                render_inline_tree(paragraph, children, base_dir, doc, bold=bold, italic=italic, strike=strike, code=code, hyperlink_el=hyperlink_el)
+                render_inline_tree(
+                    paragraph, children, base_dir, doc,
+                    bold=cur_bold, italic=cur_italic, strike=cur_strike, code=cur_code,
+                    subscript=cur_sub, superscript=cur_sup, underline=cur_underline,
+                    highlight=cur_highlight, hyperlink_el=hyperlink_el,
+                )
             elif content:
-                run = paragraph.add_run(content)
-                run.bold = bold
-                run.italic = italic
+                text = content if cur_code else normalize_inline_text(content)
+                add_styled_run(
+                    paragraph, text,
+                    bold=cur_bold, italic=cur_italic, strike=cur_strike, code=cur_code,
+                    subscript=cur_sub, superscript=cur_sup, underline=cur_underline,
+                    highlight=cur_highlight, hyperlink_el=hyperlink_el,
+                )
 
         elif children:
-            render_inline_tree(paragraph, children, base_dir, doc, bold=bold, italic=italic, strike=strike, code=code, hyperlink_el=hyperlink_el)
+            render_inline_tree(
+                paragraph, children, base_dir, doc,
+                bold=cur_bold, italic=cur_italic, strike=cur_strike, code=cur_code,
+                subscript=cur_sub, superscript=cur_sup, underline=cur_underline,
+                highlight=cur_highlight, hyperlink_el=hyperlink_el,
+            )
         elif content:
-            run = paragraph.add_run(content)
-            run.bold = bold
-            run.italic = italic
+            text = content if cur_code else normalize_inline_text(content)
+            add_styled_run(
+                paragraph, text,
+                bold=cur_bold, italic=cur_italic, strike=cur_strike, code=cur_code,
+                subscript=cur_sub, superscript=cur_sup, underline=cur_underline,
+                highlight=cur_highlight, hyperlink_el=hyperlink_el,
+            )
 
 
 def add_code_block(doc: Document, code_text: str, language: str = ""):
@@ -349,7 +1130,7 @@ def add_code_block(doc: Document, code_text: str, language: str = ""):
     pBdr.append(left_bdr)
     pPr.append(pBdr)
 
-    clean_code = code_text.rstrip("\n")
+    clean_code = sanitize_xml_text(code_text.rstrip("\n"))
     run = p.add_run(clean_code)
     run.font.name = "Consolas"
     run.font.size = Pt(9.5)
@@ -650,6 +1431,7 @@ def convert_md_to_docx(md_path: Path, output_path: Path, template_path: Path = N
         font.name = "Calibri"
         font.size = Pt(11)
 
+    md_content = preprocess_markdown_special_constructs(md_content)
     md = MarkdownIt("commonmark").enable("table").enable("strikethrough")
     tokens = md.parse(md_content)
     root = SyntaxTreeNode(tokens)
@@ -677,7 +1459,7 @@ def convert_md_to_docx(md_path: Path, output_path: Path, template_path: Path = N
             if inline_nodes:
                 render_inline_tree(p, inline_nodes, base_dir, doc)
             elif node.content:
-                p.add_run(node.content)
+                add_styled_run(p, normalize_inline_text(node.content))
 
         elif node.type == "paragraph":
             p = doc.add_paragraph(style="Normal")
@@ -691,7 +1473,7 @@ def convert_md_to_docx(md_path: Path, output_path: Path, template_path: Path = N
             if inline_nodes:
                 render_inline_tree(p, inline_nodes, base_dir, doc)
             elif node.content:
-                p.add_run(node.content)
+                add_styled_run(p, normalize_inline_text(node.content))
 
         elif node.type == "bullet_list":
             render_list_items(node, doc, base_dir, is_ordered=False, level=1)

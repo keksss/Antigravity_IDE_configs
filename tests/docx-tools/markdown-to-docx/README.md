@@ -7,7 +7,7 @@
 
 ## Архитектура тестов и сценарии
 
-Тестовый раннер `run_tests.py` выполняет 11 изолированных сценариев:
+Тестовый раннер `run_tests.py` выполняет 12 изолированных сценариев:
 
 1. **Scenario 01: Headings & Hierarchy**
    - Проверка заголовков всех уровней (`#` до `######` -> `Heading 1` до `Heading 6`).
@@ -63,6 +63,12 @@
     - Проверка OpenXML ZIP-целостности (наличие `word/document.xml`).
     - Проверка открытия всех сгенерированных документов в реальном Microsoft Word через COM Automation (`win32com.client.Dispatch("Word.Application")`).
     - Экспорт контрольного документа в PDF подтверждает 100% готовность к печати и отсутствие структурных дефектов.
+
+12. **Scenario 12: Special Symbols, Math & Inline HTML**
+    - Преобразование LaTeX-символов и формул (`\rightarrow`, `$\rightarrow$`, `\Rightarrow`, `\le`, `\pm`, `\alpha`–`\Omega`, `\frac{1}{2}`, `\sqrt{x}`, `\mathbb{R}`, индексы `x_1`, `x_{total}`).
+    - Конвертация ASCII-стрелок (`->`, `-->`, `<->`, `==>`, `<=>`) и типографических сокращений (`+-`, `!=`, `...`, `(c)`, `(r)`, `(tm)`).
+    - Поддержка инлайн-HTML тегов (`<br/>`, `<sub>`, `<sup>`, `<u>`, `<del>`, `<mark>`, `<kbd>`) и сущностей (`&rightarrow;`, `&rarr;`), а также эмодзи-шорткодов (`:arrow_right:`, `:white_check_mark:`, `:warning:`).
+    - Проверка неприкосновенности кода (`inline code` и fenced blocks) и автоматического назначения шрифта `Segoe UI Symbol` для редких Unicode-глифов.
 
 ---
 

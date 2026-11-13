@@ -734,6 +734,10 @@ def scenario_10_chained_workflow_with_docx_editor():
     )
 
     stage1_docx = folder / "contract_stage1.docx"
+    bak_file = stage1_docx.with_suffix(".docx.bak")
+    if bak_file.is_file():
+        bak_file.unlink()
+
     # Step 1: markdown-to-docx conversion
     c1, out1, err1 = run_command([str(CONVERT_SCRIPT), str(contract_md), "-o", str(stage1_docx)])
     step1_ok = c1 == 0 and stage1_docx.is_file()
@@ -751,6 +755,7 @@ def scenario_10_chained_workflow_with_docx_editor():
         str(DOCX_EDIT_SCRIPT), str(stage1_docx), "replace-text",
         "--find", "ПРОЕКТ ДОГОВОРА",
         "--replace", "УТВЕРЖДЕННЫЙ ДОГОВОР",
+        "--apply",
     ])
     step3_ok = c3 == 0
 
@@ -759,6 +764,8 @@ def scenario_10_chained_workflow_with_docx_editor():
         str(DOCX_EDIT_SCRIPT), str(stage1_docx), "append-paragraph",
         "--text", "Документ согласован и подписан уполномоченными лицами.",
         "--style", "Normal",
+        "--apply",
+        "--no-backup",
     ])
     step4_ok = c4 == 0
 
@@ -894,6 +901,107 @@ except Exception as e:
 
 
 # =========================================================================
+# Scenario 12: Special Symbols, Math & Inline HTML
+# =========================================================================
+def scenario_12_special_symbols_and_math():
+    """Verify LaTeX math symbols, ASCII arrows, inline HTML tags/entities, emoji shortcodes, and code protection."""
+    folder = SCENARIOS_DIR / "12_special_symbols_and_math"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    test_md = folder / "symbols_test.md"
+    test_md.write_text(
+        r"""# Спецсимволы, математика и инлайн-HTML
+
+Стрелки LaTeX: \rightarrow и $\rightarrow$, а также $\Rightarrow$, $\Leftrightarrow$, $\mapsto$, $\leftarrow$.
+Формулы: $x_1 + y_2 \le 10 \pm 0.5$, $\alpha, \beta, \Delta, \Omega$, $\frac{1}{2}$, $\sqrt{x}$, $x \in \mathbb{R}$, $\forall \varepsilon > 0, \exists \delta \neq 0, \infty$.
+Сложный индекс: $x_{total} + y^{max}$.
+
+ASCII стрелки и типографика: A -> B, C --> D, E <-> F, G ==> H, I <=> J, точность +-5%, проверка a != b, ожидание..., права (c) (r) (tm).
+Бюджет проекта составляет от $100 до $200 без наценок.
+
+HTML сущности и теги: &rightarrow; и &rarr;, вода H<sub>2</sub>O, энергия E = mc<sup>2</sup>, <u>подчеркнутый</u>, <del>удаленный</del>, <mark>выделенный</mark>, клавиша <kbd>Ctrl+C</kbd>.
+Эмодзи-шорткоды: :arrow_right: Готово :white_check_mark: Предупреждение :warning:
+
+| Конструкция | Результат и перенос |
+| :--- | :--- |
+| Многострочная ячейка | Первая строка<br/>Вторая строка $\rightarrow$ итог |
+
+Защита кода: `a -> b != c \rightarrow` не должна искажаться.
+
+```python
+def transform(x: int) -> bool:
+    # \rightarrow and != must remain literal in code blocks
+    return x != 0
+```
+""",
+        encoding="utf-8",
+    )
+
+    out_docx = folder / "symbols_output.docx"
+    code, out, err = run_command([str(CONVERT_SCRIPT), str(test_md), "-o", str(out_docx)])
+    all_ok = code == 0 and out_docx.is_file()
+
+    notes = []
+    if all_ok:
+        generated_docx_files.append(out_docx)
+        doc = docx.Document(str(out_docx))
+        all_p_text = "\n".join(p.text for p in doc.paragraphs)
+        all_tbl_text = "\n".join(cell.text for tbl in doc.tables for row in tbl.rows for cell in row.cells)
+        combined_text = all_p_text + "\n" + all_tbl_text
+
+        expected_chars = [
+            "→", "⇒", "⇔", "↦", "←", "≤", "±", "α", "β", "Δ", "Ω",
+            "½", "√", "∈", "ℝ", "∀", "∃", "≠", "∞", "↔", "…", "©", "®", "™",
+            "✅", "⚠", "$100", "$200",
+        ]
+        missing_chars = [ch for ch in expected_chars if ch not in combined_text]
+        if missing_chars:
+            all_ok = False
+            notes.append(f"Missing converted symbols: {missing_chars}")
+
+        # Verify subscript / superscript / underline / highlight runs
+        all_runs = [r for p in doc.paragraphs for r in p.runs]
+        has_sub = any(r.font.subscript for r in all_runs)
+        has_sup = any(r.font.superscript for r in all_runs)
+        has_underline = any(r.underline for r in all_runs)
+        has_highlight = any(r.font.highlight_color is not None for r in all_runs)
+        if not (has_sub and has_sup and has_underline and has_highlight):
+            all_ok = False
+            notes.append(f"HTML formatting missing: sub={has_sub}, sup={has_sup}, u={has_underline}, mark={has_highlight}")
+
+        # Verify code protection
+        if "a -> b != c \\rightarrow" not in all_p_text:
+            all_ok = False
+            notes.append("Inline code was altered by symbol handler")
+        if "def transform(x: int) -> bool:" not in all_p_text or "# \\rightarrow and != must remain literal" not in all_p_text:
+            all_ok = False
+            notes.append("Code block was altered by symbol handler")
+
+        # Verify <br/> became <w:br/> in table cell without literal <br/>
+        if "<br" in combined_text.lower():
+            all_ok = False
+            notes.append("Literal <br> tag leaked into text")
+
+        with zipfile.ZipFile(out_docx, "r") as z:
+            doc_xml = z.read("word/document.xml").decode("utf-8")
+        if "<w:br" not in doc_xml:
+            all_ok = False
+            notes.append("Missing <w:br/> element from <br/> tag")
+        if "Segoe UI Symbol" not in doc_xml:
+            all_ok = False
+            notes.append("Missing Segoe UI Symbol font fallback in document.xml")
+
+    rep = f"""# Отчет по сценарию 12: Special Symbols, Math & Inline HTML
+- Код возврата: {code}
+- Сгенерирован DOCX: {'ДА' if out_docx.is_file() else 'НЕТ'}
+- Замечания: {'; '.join(notes) if notes else 'Нет'}
+- Статус: {'УСПЕХ' if all_ok else 'ОШИБКА'}
+"""
+    (folder / "scenario_report.md").write_text(rep, encoding="utf-8")
+    record_result("Scenario 12: Special Symbols, Math & Inline HTML", all_ok, "Converted LaTeX, ASCII arrows, HTML tags/entities, emoji & protected code", folder)
+
+
+# =========================================================================
 # Main Test Runner
 # =========================================================================
 def main():
@@ -913,6 +1021,7 @@ def main():
     scenario_08_images_and_aspect_ratio()
     scenario_09_template_inheritance()
     scenario_10_chained_workflow_with_docx_editor()
+    scenario_12_special_symbols_and_math()
     scenario_11_word_com_automation()
 
     # Generate test_summary.json

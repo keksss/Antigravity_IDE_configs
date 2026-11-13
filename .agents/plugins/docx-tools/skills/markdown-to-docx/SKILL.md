@@ -87,6 +87,10 @@ If `document.md` references relative images like `![Chart](images/q1_chart.png)`
 - **Tables:** GFM tables with column alignments (left, center, right), repeated header rows (`tblHeader`), `cantSplit` protection against page breaks, and rich inline formatting in cells.
 - **Images:** Embedded and centered proportionally, preserving natural aspect ratio and DPI using Pillow.
 - **Horizontal Rules:** Centered divider line (`---`, `***`).
+- **LaTeX & Math Symbols (`\rightarrow`, `$\rightarrow$`, etc.):** Automatic conversion of inline/block math expressions (`$...$`, `$$...$$`, `\(...\)`, `\[...\]`) and standalone LaTeX commands: arrows (`\rightarrow`, `\Rightarrow`, `\leftrightarrow`, `\mapsto`), comparisons/operators (`\le`, `\ge`, `\neq`, `\approx`, `\pm`, `\times`, `\div`, `\in`, `\forall`, `\exists`, `\infty`, `\sum`, `\sqrt{...}`, `\frac{a}{b}`), Greek letters (`\alpha`–`\Omega`), blackboard bold (`\mathbb{R}`), and superscripts/subscripts (`x^2`, `x_i`).
+- **ASCII Arrows & Typographic Shorthands:** Automatic conversion of `->`, `-->`, `<-`, `<--`, `<->`, `<-->`, `==>`, `<==`, `<=>`, `+/-`, `!=`, `<=`, `>=`, `~=`, `...`, `---`, `--`, `(c)`, `(r)`, `(tm)` in prose (while keeping code blocks, inline code, and URLs untouched).
+- **Inline HTML & Entities:** Support for `<br>` / `<br/>` (including multiline table cells), `<sub>`, `<sup>`, `<u>` / `<ins>`, `<s>` / `<del>`, `<mark>`, `<kbd>`, and HTML named/numeric entities (`&rightarrow;`, `&rarr;`, `&nbsp;`, etc.).
+- **Emoji Shortcodes & Symbol Font Fallback:** GitHub shortcodes (`:arrow_right:`, `:white_check_mark:`, `:warning:`, etc.) and automatic OpenXML `Segoe UI Symbol` font binding to prevent missing-glyph boxes (`□`) in Word and PDF export.
 
 ---
 

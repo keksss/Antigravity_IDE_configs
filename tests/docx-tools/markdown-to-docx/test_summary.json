@@ -1,7 +1,7 @@
 {
   "skill": "markdown-to-docx",
-  "total_scenarios": 11,
-  "passed_scenarios": 11,
+  "total_scenarios": 12,
+  "passed_scenarios": 12,
   "failed_scenarios": 0,
   "all_passed": true,
   "scenarios": [
@@ -66,9 +66,15 @@
       "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\10_chained_workflow"
     },
     {
+      "scenario": "Scenario 12: Special Symbols, Math & Inline HTML",
+      "passed": true,
+      "details": "Converted LaTeX, ASCII arrows, HTML tags/entities, emoji & protected code",
+      "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\12_special_symbols_and_math"
+    },
+    {
       "scenario": "Scenario 11: Word COM Automation",
       "passed": true,
-      "details": "All 10 docx files opened in MS Word & exported to PDF",
+      "details": "All 11 docx files opened in MS Word & exported to PDF",
       "folder": "tests\\docx-tools\\markdown-to-docx\\scenarios\\11_word_com_automation"
     }
   ]
